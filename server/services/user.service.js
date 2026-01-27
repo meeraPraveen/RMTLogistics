@@ -37,7 +37,7 @@ export const getUserRole = async (auth0UserId) => {
 export const getUserByAuth0Id = async (auth0UserId) => {
   try {
     const result = await query(
-      `SELECT id, auth0_user_id, email, name, role, auth0_role, is_active
+      `SELECT id, auth0_user_id, email, name, role, is_active
        FROM users
        WHERE auth0_user_id = $1`,
       [auth0UserId]
@@ -199,7 +199,7 @@ export const getAllUsers = async (options = {}) => {
     // Get paginated users
     params.push(limit, offset);
     const result = await query(
-      `SELECT id, auth0_user_id, email, name, role, auth0_role, is_active, created_at, updated_at, last_login
+      `SELECT id, auth0_user_id, email, name, role, is_active, created_at, updated_at, last_login
        FROM users
        ${whereClause}
        ORDER BY created_at DESC
@@ -499,28 +499,18 @@ export const reactivateUser = async (auth0UserId) => {
 };
 
 /**
- * Update user's last login timestamp and Auth0 role
+ * Update user's last login timestamp
  * @param {string} auth0UserId - Auth0 user ID
- * @param {string} auth0Role - Auth0 role (optional)
  * @returns {Promise<void>}
  */
-export const updateLastLogin = async (auth0UserId, auth0Role = null) => {
+export const updateLastLogin = async (auth0UserId) => {
   try {
-    if (auth0Role) {
-      await query(
-        `UPDATE users
-         SET last_login = CURRENT_TIMESTAMP, auth0_role = $2
-         WHERE auth0_user_id = $1`,
-        [auth0UserId, auth0Role]
-      );
-    } else {
-      await query(
-        `UPDATE users
-         SET last_login = CURRENT_TIMESTAMP
-         WHERE auth0_user_id = $1`,
-        [auth0UserId]
-      );
-    }
+    await query(
+      `UPDATE users
+       SET last_login = CURRENT_TIMESTAMP
+       WHERE auth0_user_id = $1`,
+      [auth0UserId]
+    );
   } catch (error) {
     console.error('Error updating last login:', error);
     // Don't throw - last login tracking shouldn't break authentication

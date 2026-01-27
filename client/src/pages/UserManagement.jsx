@@ -281,7 +281,6 @@ const UserManagement = () => {
                   <th>Name</th>
                   <th>Email</th>
                   <th>Role</th>
-                  {isSuperAdmin && <th>Auth0 Role</th>}
                   <th>Status</th>
                   <th>Created</th>
                   <th>Last Login</th>
@@ -291,14 +290,13 @@ const UserManagement = () => {
               <tbody>
                 {users.length === 0 ? (
                   <tr>
-                    <td colSpan={isSuperAdmin ? "8" : "7"} className="no-data">
+                    <td colSpan="7" className="no-data">
                       No users found
                     </td>
                   </tr>
                 ) : (
                   users.map(user => {
                     const status = getUserStatus(user);
-                    const hasRoleMismatch = user.auth0_role && user.auth0_role !== user.role;
                     return (
                       <tr key={user.id}>
                         <td>{user.name || <em>Not set</em>}</td>
@@ -306,17 +304,6 @@ const UserManagement = () => {
                         <td>
                           <span className="role-badge">{user.role}</span>
                         </td>
-                        {isSuperAdmin && (
-                          <td>
-                            <span
-                              className="role-badge"
-                              style={hasRoleMismatch ? { backgroundColor: '#ffc107', color: '#000' } : {}}
-                              title={hasRoleMismatch ? 'Role mismatch detected!' : ''}
-                            >
-                              {user.auth0_role || <em>Not set</em>}
-                            </span>
-                          </td>
-                        )}
                         <td>
                           <span
                             className="status-badge"

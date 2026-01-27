@@ -117,16 +117,10 @@ export const extractUserInfo = async (req, res, next) => {
       }
 
       // User has role from database - grant access
-      console.log(`✅ Access GRANTED for ${email} - Auth0 Role: ${auth0Role}, Database Role: ${dbRole} (using DB role)`);
+      console.log(`✅ Access GRANTED for ${email} - Database Role: ${dbRole}`);
 
-      // Check if there's a role mismatch
-      const roleMismatch = auth0Role !== dbRole;
-      if (roleMismatch) {
-        console.warn(`⚠️  ROLE MISMATCH for ${email} - Auth0: ${auth0Role}, Database: ${dbRole}`);
-      }
-
-      // Update last login timestamp and Auth0 role (non-blocking)
-      updateLastLogin(auth0UserId, auth0Role).catch(err =>
+      // Update last login timestamp (non-blocking)
+      updateLastLogin(auth0UserId).catch(err =>
         console.error('Failed to update last login:', err)
       );
 
@@ -134,9 +128,7 @@ export const extractUserInfo = async (req, res, next) => {
         id: dbUserId, // Database user ID (for foreign key references)
         auth0UserId: auth0UserId, // Auth0 user ID
         email: email,
-        role: dbRole, // Use database role, not Auth0 role
-        auth0Role: auth0Role, // Include Auth0 role for comparison
-        roleMismatch: roleMismatch, // Flag for frontend
+        role: dbRole, // Database role (source of truth)
         permissions: []
       };
 
