@@ -257,3 +257,59 @@ export const createRoleModulePermissions = async (role, module, permissions) => 
     throw error;
   }
 };
+
+/**
+ * Sync role permissions to Auth0 for all users with that role
+ * @param {string} role - Role name
+ * @returns {Promise<Object>} - Sync result with counts
+ */
+export const syncRolePermissionsToAuth0 = async (role) => {
+  try {
+    const { updateAuth0User } = await import('./auth0.service.js');
+
+    // Get current permissions for the role from database
+    const permissions = await getRolePermissions(role);
+
+    // Get all users with this role
+    const result = await query(
+      'SELECT id, auth0_user_id, email FROM users WHERE role = $1',
+      [role]
+    );
+
+    const users = result.rows;
+    let synced = 0;
+    let skipped = 0;
+    let errors = 0;
+
+    for (const user of users) {
+      // Skip users without Auth0 ID or pending users
+      if (!user.auth0_user_id || user.auth0_user_id.startsWith('pending_')) {
+        skipped++;
+        continue;
+      }
+
+      try {
+        // Sync to Auth0
+        await updateAuth0User(user.auth0_user_id, {
+          role: role,
+          permissions: permissions
+        });
+        synced++;
+      } catch (error) {
+        console.error(`Failed to sync permissions to Auth0 for ${user.email}:`, error.message);
+        errors++;
+      }
+    }
+
+    return {
+      role,
+      total: users.length,
+      synced,
+      skipped,
+      errors
+    };
+  } catch (error) {
+    console.error('Error syncing role permissions to Auth0:', error);
+    throw error;
+  }
+};

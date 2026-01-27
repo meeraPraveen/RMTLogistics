@@ -117,6 +117,7 @@ router.get('/:role', requireModule(MODULES.USER_MANAGEMENT), async (req, res) =>
  * PUT /api/permissions/:role
  * Update permissions for a specific role
  * Accessible by SuperAdmin only
+ * Automatically syncs to Auth0 for all users with this role
  */
 router.put('/:role', requireModule(MODULES.USER_MANAGEMENT), async (req, res) => {
   try {
@@ -161,6 +162,16 @@ router.put('/:role', requireModule(MODULES.USER_MANAGEMENT), async (req, res) =>
     }
 
     const updatedPermissions = await updateRolePermissions(role, modulePermissions);
+
+    // AUTO-SYNC: Sync updated permissions to Auth0 for all users with this role
+    try {
+      const { syncRolePermissionsToAuth0 } = await import('../services/permissions.service.js');
+      const syncResult = await syncRolePermissionsToAuth0(role);
+      console.log(`🔄 Auto-synced permissions to Auth0 for ${syncResult.synced} user(s) with role ${role}`);
+    } catch (syncError) {
+      console.error(`⚠️  Failed to auto-sync permissions to Auth0:`, syncError.message);
+      // Don't fail the request - permissions are saved in DB (source of truth)
+    }
 
     res.json({
       success: true,
@@ -253,6 +264,7 @@ router.post('/:role/:module', requireModule(MODULES.USER_MANAGEMENT), async (req
  * PUT /api/permissions/:role/:module
  * Update permissions for a specific role and module
  * Accessible by SuperAdmin only
+ * Automatically syncs to Auth0 for all users with this role
  */
 router.put('/:role/:module', requireModule(MODULES.USER_MANAGEMENT), async (req, res) => {
   try {
@@ -283,6 +295,16 @@ router.put('/:role/:module', requireModule(MODULES.USER_MANAGEMENT), async (req,
     const { updateRoleModulePermissions } = await import('../services/permissions.service.js');
     const updated = await updateRoleModulePermissions(role, module, permissions);
 
+    // AUTO-SYNC: Sync updated permissions to Auth0 for all users with this role
+    try {
+      const { syncRolePermissionsToAuth0 } = await import('../services/permissions.service.js');
+      const syncResult = await syncRolePermissionsToAuth0(role);
+      console.log(`🔄 Auto-synced permissions to Auth0 for ${syncResult.synced} user(s) with role ${role}`);
+    } catch (syncError) {
+      console.error(`⚠️  Failed to auto-sync permissions to Auth0:`, syncError.message);
+      // Don't fail the request - permissions are saved in DB (source of truth)
+    }
+
     res.json({
       success: true,
       message: `Permissions updated for ${role} on ${module}`,
@@ -301,6 +323,7 @@ router.put('/:role/:module', requireModule(MODULES.USER_MANAGEMENT), async (req,
  * DELETE /api/permissions/:role/:module
  * Delete permissions for a specific role and module
  * Accessible by SuperAdmin only
+ * Automatically syncs to Auth0 for all users with this role
  */
 router.delete('/:role/:module', requireModule(MODULES.USER_MANAGEMENT), async (req, res) => {
   try {
@@ -328,6 +351,16 @@ router.delete('/:role/:module', requireModule(MODULES.USER_MANAGEMENT), async (r
         success: false,
         error: 'Permission not found'
       });
+    }
+
+    // AUTO-SYNC: Sync updated permissions to Auth0 for all users with this role
+    try {
+      const { syncRolePermissionsToAuth0 } = await import('../services/permissions.service.js');
+      const syncResult = await syncRolePermissionsToAuth0(role);
+      console.log(`🔄 Auto-synced permissions to Auth0 for ${syncResult.synced} user(s) with role ${role}`);
+    } catch (syncError) {
+      console.error(`⚠️  Failed to auto-sync permissions to Auth0:`, syncError.message);
+      // Don't fail the request - permissions are saved in DB (source of truth)
     }
 
     res.json({
