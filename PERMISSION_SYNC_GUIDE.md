@@ -164,8 +164,42 @@ exports.onExecutePostLogin = async (event, api) => {
 
 ### 3. Scripts
 
-#### Sync All Permissions (one-time)
-Run this once to sync permissions for all existing users:
+#### Sync Permissions for Specific Role
+Run this after modifying role permissions in the `role_permissions` table:
+
+```bash
+node scripts/sync-role-permissions.js <RoleName>
+```
+
+Example:
+```bash
+# After removing "printing_software" module from Admin role
+node scripts/sync-role-permissions.js Admin
+```
+
+Output:
+```
+🔄 Syncing permissions for role: Admin
+
+📋 Current permissions in database:
+   order_management: read, write, update, delete
+   inventory_management: read, write, update, delete
+
+📊 Found 1 user(s) with role Admin:
+
+👤 Processing: meerapraveen07@gmail.com
+   ✅ Synced successfully
+
+============================================================
+📊 Sync Summary:
+   Role: Admin
+   Total Users: 1
+   ✅ Synced: 1
+============================================================
+```
+
+#### Sync All Permissions (bulk operation)
+Run this to sync permissions for all users across all roles:
 
 ```bash
 node scripts/sync-all-permissions.js
@@ -239,8 +273,15 @@ Permissions are automatically synced in these scenarios:
    → updateAuth0User({ role, permissions })
    ```
 
-3. **Manual Sync** (for existing users or after role_permissions changes)
+3. **Role Permissions Modified** (e.g., Admin loses access to printing_software)
    ```bash
+   # After updating role_permissions table, sync to all users with that role
+   node scripts/sync-role-permissions.js Admin
+   ```
+
+4. **Manual Sync** (for existing users or bulk operations)
+   ```bash
+   # Sync all users (all roles)
    node scripts/sync-all-permissions.js
    ```
 
@@ -336,17 +377,26 @@ node scripts/sync-all-permissions.js
 2. Add to Login flow
 3. Logout completely + Clear browser cache + Login again
 
-### Problem: Permissions out of date
-**Cause**: Role permissions changed in database but not synced
+### Problem: Permissions out of date after modifying role_permissions
+**Cause**: Role permissions changed in `role_permissions` table but not synced to Auth0
+
+**Example**: Removed "printing_software" module from Admin role, but Auth0 still shows it.
 
 **Solution**:
 ```bash
-# Sync all users
-node scripts/sync-all-permissions.js
+# Sync all users with specific role (recommended)
+node scripts/sync-role-permissions.js Admin
 
-# Or sync specific user by updating their role
-PUT /api/users/:id { role: "SameRole" }  # Triggers sync
+# OR sync all users (all roles)
+node scripts/sync-all-permissions.js
 ```
+
+**Why this happens**: Changing `role_permissions` table doesn't automatically update Auth0. You must manually sync.
+
+**When to use**:
+- After adding/removing module access for a role
+- After changing permissions (read, write, update, delete) for a module
+- After bulk updates to role_permissions table
 
 ## Benefits
 
