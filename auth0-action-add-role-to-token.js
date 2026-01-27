@@ -39,14 +39,23 @@ exports.onExecutePostLogin = async (event, api) => {
   // Get user's role from app_metadata (synced from PostgreSQL database)
   const role = event.user.app_metadata?.role;
 
+  console.log(`[Auth0 Action] User login: ${event.user.email}`);
+  console.log(`[Auth0 Action] app_metadata:`, JSON.stringify(event.user.app_metadata));
+  console.log(`[Auth0 Action] role found:`, role);
+
   // Add role to token if it exists
   if (role) {
+    // Use both namespaced and non-namespaced claims for compatibility
+    api.idToken.setCustomClaim('https://yourapp.com/app_role', role);
+    api.accessToken.setCustomClaim('https://yourapp.com/app_role', role);
+
+    // Also try non-namespaced (some Auth0 configurations allow this)
     api.idToken.setCustomClaim('app_role', role);
     api.accessToken.setCustomClaim('app_role', role);
 
-    console.log(`User ${event.user.email} logged in with role: ${role}`);
+    console.log(`[Auth0 Action] ✅ Added role to token: ${role}`);
   } else {
-    console.log(`User ${event.user.email} logged in without a role in app_metadata`);
+    console.log(`[Auth0 Action] ⚠️  No role in app_metadata - user may be blocked`);
   }
 };
 

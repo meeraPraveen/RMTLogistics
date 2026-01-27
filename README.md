@@ -1,38 +1,45 @@
-# Auth0 RBAC Application (Auth0 as Gatekeeper)
+# Auth0 RBAC Application - RMT Logistics
 
-A comprehensive Role-Based Access Control (RBAC) system with Auth0 authentication, featuring multiple modules with fine-grained permissions.
+A comprehensive Role-Based Access Control (RBAC) system with Auth0 authentication, featuring user management, order tracking, and fine-grained permissions.
 
-## 🔐 Security Model: Auth0 as Gatekeeper
+## 🔐 Security Architecture: Database as Source of Truth
 
-**Auth0 blocks unauthorized users** - Only users you create in Auth0 can login (no API needed).
-**PostgreSQL stores roles** - Your database controls what users can do after they login.
+**PostgreSQL is the single source of truth** - All roles and permissions are managed in your database.
+**Auth0 provides authentication** - Handles login, session management, and security.
+**Application UI manages everything** - Create users, assign roles, update permissions - all through the web interface.
 
 ### How It Works:
-1. **Admin creates user in Auth0** → User can login
-2. **Admin creates user in PostgreSQL** → User gets role and permissions
-3. **User logs in** → Auth0 authenticates, your app checks permissions
-4. **Unauthorized users** → Blocked by Auth0 before reaching your app
 
-**No Auth0 API, no external calls during login, full control over permissions.**
+```
+┌─────────────────────────────────────────────────────────────┐
+│  1. Admin creates user in UI → Stored in PostgreSQL         │
+│  2. System syncs user to Auth0 → User can now login         │
+│  3. User logs in → Auth0 authenticates                       │
+│  4. Auth0 Action reads role from app_metadata → Adds to token│
+│  5. Backend validates token → Checks permissions from DB     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key Principle:** PostgreSQL database controls WHO can access WHAT. Auth0 only handles authentication.
 
 ## Features
 
-### Modules
-- **User Management** - Manage roles and permissions (SuperAdmin only)
-- **Order Management** - Track and manage customer orders
-- **Inventory Management** - Monitor stock levels and inventory
-- **Printing Software** - Manage print jobs and printer queue
-- **System Configuration** - Application settings and integrations
+### Core Modules
+- **User Management** - Create users, assign roles, manage permissions
+- **Order Management** - Track and manage customer orders with status workflow
+- **Company Management** - Manage client companies and contacts
+- **Role Permissions** - Configure granular permissions per role and module
+- **Dashboard** - Overview of orders, stats, and quick actions
 
 ### Roles & Default Permissions
 
-| Role | User Management | Order Management | Inventory | Printing | System Config |
-|------|----------------|-----------------|-----------|----------|--------------|
-| **SuperAdmin** | Full Access | Full Access | Full Access | Full Access | Full Access |
-| **Admin** | - | Full Access | Full Access | Full Access | - |
-| **Lead Artist** | - | Read, Write, Update | - | - | - |
-| **Artist** | - | - | - | - | - |
-| **Production Tech** | - | - | - | Read, Write, Update | - |
+| Role | User Management | Order Management | Company Management | Inventory | Printing | System Config |
+|------|----------------|------------------|--------------------|-----------|----------|--------------|
+| **SuperAdmin** | Full Access | Full Access | Full Access | Full Access | Full Access | Full Access |
+| **Admin** | Create/Edit Users | Full Access | Full Access | Full Access | Full Access | - |
+| **Lead Artist** | - | Read, Write, Update | Read | - | - | - |
+| **Artist** | - | Read | Read | - | - | - |
+| **Production Tech** | - | Read | Read | - | Read, Write, Update | - |
 
 ### Permission Types
 - **Read** - View data
@@ -42,77 +49,128 @@ A comprehensive Role-Based Access Control (RBAC) system with Auth0 authenticatio
 
 ## Architecture
 
-### Backend (Node.js + Express)
+### Tech Stack
+- **Backend**: Node.js + Express
+- **Frontend**: React + Vite
+- **Database**: PostgreSQL
+- **Authentication**: Auth0 (OAuth 2.0 / OpenID Connect)
+- **Authorization**: Custom RBAC with database-driven permissions
+
+### Database-Driven Authorization Flow
+
+```
+User Management UI
+       ↓
+  PostgreSQL (Source of Truth)
+       ↓
+  Auth0 app_metadata (Sync)
+       ↓
+  ID Token (Custom Claim)
+       ↓
+  Backend Middleware (Validation)
+       ↓
+  Module Access (Granted/Denied)
+```
+
+### Backend Structure
 ```
 server/
 ├── config/
-│   └── rbac.config.js         # Role-permission mappings
+│   ├── database.js              # PostgreSQL connection
+│   └── rbac.config.js           # Role-permission mappings
 ├── middleware/
-│   ├── auth.middleware.js     # Auth0 ID token validation
-│   └── rbac.middleware.js     # Permission checking
+│   ├── auth.middleware.js       # Auth0 ID token validation
+│   └── rbac.middleware.js       # Permission checking
+├── services/
+│   ├── user.service.js          # User CRUD + Auth0 sync
+│   ├── auth0.service.js         # Auth0 Management API
+│   ├── permissions.service.js   # Permission queries
+│   └── order.service.js         # Order management
 ├── routes/
-│   ├── permissions.routes.js  # Permission management API
-│   └── modules.routes.js      # Module-specific routes
-└── index.js                   # Express server
+│   ├── users.routes.js          # User management API
+│   ├── permissions.routes.js    # Permission management API
+│   ├── orders.routes.js         # Order management API
+│   └── companies.routes.js      # Company management API
+└── index.js                     # Express server
 ```
 
-### Frontend (React + Auth0)
+### Frontend Structure
 ```
 client/src/
 ├── components/
-│   ├── Layout.jsx             # Main layout with sidebar
-│   └── ProtectedRoute.jsx     # Route protection
+│   ├── Layout.jsx               # Main layout with sidebar
+│   ├── ProtectedRoute.jsx       # Route protection
+│   ├── UserModal.jsx            # User create/edit modal
+│   └── RoleMismatchAlert.jsx    # Detects DB/Auth0 role sync issues
 ├── hooks/
-│   └── usePermissions.js      # Permission checking hook
+│   └── usePermissions.js        # Permission checking hook
 ├── pages/
-│   ├── Dashboard.jsx          # Overview of accessible modules
-│   ├── UserManagement.jsx     # Edit role permissions
-│   ├── OrderManagement.jsx    # Orders module
-│   ├── InventoryManagement.jsx# Inventory module
-│   ├── PrintingSoftware.jsx   # Printing module
-│   └── SystemConfig.jsx       # Configuration module
+│   ├── Dashboard.jsx            # Overview with stats
+│   ├── UserManagement.jsx       # User CRUD + role assignment
+│   ├── RolePermissions.jsx      # Configure role permissions
+│   ├── OrderManagement.jsx      # Order tracking
+│   └── CompanyManagement.jsx    # Client management
 └── utils/
-    └── api.js                 # API client
+    └── api.js                   # API client with Auth0 integration
 ```
 
 ## Setup Instructions
 
 ### Prerequisites
-- Node.js (v16 or higher)
+- Node.js (v18 or higher)
+- PostgreSQL (v15 or higher)
 - Auth0 account (free tier works)
 - npm or yarn
 
-### 1. PostgreSQL Database Setup
+### 1. Clone and Install
 
-**User roles are stored in PostgreSQL, not Auth0.**
+```bash
+git clone https://github.com/meeraPraveen/RMTLogistics.git
+cd RMTLogistics
+
+# Install backend dependencies
+npm install
+
+# Install frontend dependencies
+cd client
+npm install
+cd ..
+```
+
+### 2. PostgreSQL Database Setup
+
+**User roles and permissions are stored in PostgreSQL.**
 
 See detailed instructions in [DATABASE_SETUP.md](DATABASE_SETUP.md)
 
 Quick setup:
 ```bash
-# 1. Install PostgreSQL (if not already installed)
-# Windows: Download from postgresql.org
-# Mac: brew install postgresql@15
-# Linux: sudo apt install postgresql
-
-# 2. Create database
+# 1. Create database
 psql -U postgres
-CREATE DATABASE auth0_rbac;
+CREATE DATABASE auth_rbac_db;
 \q
 
-# 3. Run migrations
-npm install
+# 2. Run migrations
 npm run db:setup  # Creates tables
 npm run db:seed   # Inserts default permissions
 
-# 4. Configure environment
+# 3. Configure environment
 cp .env.example .env
 # Edit .env with your database credentials
 ```
 
-### 2. Auth0 Configuration
+**Database Schema:**
+- `users` - User accounts with roles (source of truth)
+- `role_permissions` - Permission mappings per role and module
+- `orders` - Order management data
+- `companies` - Client companies
+- `audit_log` - Tracks all user actions
 
-**Simple setup - No Actions or custom claims needed!**
+### 3. Auth0 Configuration
+
+**Two-part setup required:**
+
+#### Part 1: Create Auth0 Application
 
 1. Go to [Auth0 Dashboard](https://manage.auth0.com/)
 2. Create a new **Single Page Application**
@@ -122,78 +180,106 @@ cp .env.example .env
    - **Allowed Logout URLs**: `http://localhost:3000`
    - **Allowed Web Origins**: `http://localhost:3000`
 
-**That's it for Auth0!** No Actions, no metadata, no custom claims.
+#### Part 2: Create Auth0 Management API Application
 
-### 3. Add Your User to Database
+For user sync to work, you need Management API credentials:
 
-After you create your Auth0 account and log in for the first time:
+1. Go to **Applications** > **Applications**
+2. Create new **Machine to Machine Application**
+3. Name: "RMT Logistics Management"
+4. Authorize for **Auth0 Management API**
+5. Grant permissions:
+   - `read:users`
+   - `update:users`
+   - `create:users`
+   - `delete:users`
+   - `update:users_app_metadata`
+   - `create:user_tickets`
+6. Note the **Client ID** and **Client Secret**
 
-1. **Get your Auth0 User ID:**
-   - Log into [Auth0 Dashboard](https://manage.auth0.com/)
-   - Go to **User Management** > **Users**
-   - Click on your user
-   - Copy the **User ID** (e.g., `auth0|63f8d7b3a1b2c3d4e5f6g7h8`)
+#### Part 3: Create Auth0 Action (Required)
 
-2. **Add yourself to the database:**
-```sql
--- Connect to database
-psql -U postgres -d auth0_rbac
+This Action adds the user's role from `app_metadata` to the ID token:
 
--- Insert your user with SuperAdmin role
-INSERT INTO users (auth0_user_id, email, role)
-VALUES ('auth0|YOUR_ACTUAL_ID_HERE', 'your-email@example.com', 'SuperAdmin');
+1. Go to **Actions** > **Library**
+2. Click **+ Create Action**
+3. Choose **Login / Post Login**
+4. Name: `Add Role To Token`
+5. Copy the code from [`auth0-action-add-role-to-token.js`](auth0-action-add-role-to-token.js)
+6. Click **Deploy** (top right)
+7. Go to **Actions** > **Flows** > **Login**
+8. Drag "Add Role To Token" from Custom tab to the flow (between Start and Complete)
+9. Click **Apply**
 
--- Verify
-SELECT * FROM users;
-\q
-```
+**What this Action does:**
+- Reads `user.app_metadata.role` (synced from PostgreSQL)
+- Adds role as custom claim `app_role` to ID and access tokens
+- No blocking - all authorization handled by your backend
 
 ### 4. Environment Setup
 
 #### Backend Configuration
-1. Copy the environment template:
-   ```bash
-   cp .env.example .env
-   ```
+```bash
+cp .env.example .env
+```
 
-2. Edit `.env` with your Auth0 credentials:
-   ```env
-   AUTH0_DOMAIN=your-tenant.auth0.com
-   AUTH0_CLIENT_ID=your-client-id
-   PORT=3001
-   NODE_ENV=development
-   ```
+Edit `.env` with your credentials:
+```env
+# Database
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=auth_rbac_db
+DB_USER=postgres
+DB_PASSWORD=your_password
+
+# Auth0 SPA (for token validation)
+AUTH0_DOMAIN=your-tenant.auth0.com
+AUTH0_CLIENT_ID=your-spa-client-id
+AUTH0_AUDIENCE=https://your-tenant.auth0.com/api/v2/
+
+# Auth0 Management API (for user sync)
+AUTH0_MGMT_DOMAIN=your-tenant.auth0.com
+AUTH0_MGMT_CLIENT_ID=your-m2m-client-id
+AUTH0_MGMT_CLIENT_SECRET=your-m2m-client-secret
+
+# Server
+PORT=3001
+NODE_ENV=development
+```
 
 #### Frontend Configuration
-1. Copy the environment template:
-   ```bash
-   cd client
-   cp .env.example .env
-   ```
-
-2. Edit `client/.env` with your Auth0 credentials:
-   ```env
-   VITE_AUTH0_DOMAIN=your-tenant.auth0.com
-   VITE_AUTH0_CLIENT_ID=your-client-id
-   VITE_API_URL=http://localhost:3001
-   ```
-
-### 3. Installation
-
-#### Install Backend Dependencies
-```bash
-npm install
-```
-
-#### Install Frontend Dependencies
 ```bash
 cd client
-npm install
+cp .env.example .env
 ```
 
-### 4. Running the Application
+Edit `client/.env`:
+```env
+VITE_AUTH0_DOMAIN=your-tenant.auth0.com
+VITE_AUTH0_CLIENT_ID=your-spa-client-id
+VITE_AUTH0_AUDIENCE=https://your-tenant.auth0.com/api/v2/
+VITE_API_URL=http://localhost:3001
+```
 
-#### Option 1: Run Both Servers Concurrently
+### 5. Create Your First User
+
+After database setup, create your SuperAdmin account:
+
+```bash
+# Option 1: Via script
+node scripts/add-user.js your-email@example.com "Your Name" SuperAdmin
+
+# Option 2: Via SQL
+psql -U postgres -d auth_rbac_db
+INSERT INTO users (email, name, role, is_active, auth0_user_id)
+VALUES ('your-email@example.com', 'Your Name', 'SuperAdmin', true, 'pending_your-email@example.com');
+```
+
+The user will be synced to Auth0 when you first run the application.
+
+### 6. Running the Application
+
+#### Option 1: Run Both Servers Concurrently (Recommended)
 ```bash
 npm run dev:all
 ```
@@ -210,155 +296,268 @@ cd client
 npm run dev
 ```
 
-### 5. Access the Application
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:3001
-- API Documentation: http://localhost:3001/api
+### 7. Access the Application
 
-## Development Mode
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:3001
+- **API Documentation**: http://localhost:3001/api
 
-For testing without Auth0 configured, the backend uses mock authentication in development mode. This creates a mock SuperAdmin user automatically.
+**First Login:**
+1. Go to http://localhost:3000
+2. Click "Login"
+3. Sign up with the email you added to the database
+4. You'll be logged in as SuperAdmin
 
-To disable mock auth and use real Auth0:
-1. Configure Auth0 properly (see Auth0 Configuration above)
-2. Ensure `.env` files are properly configured
-3. The app will automatically use Auth0 when you login
+## User Management Workflow
+
+### Creating a New User (via UI)
+
+1. Login as Admin or SuperAdmin
+2. Navigate to **User Management**
+3. Click **+ Add User**
+4. Fill in details:
+   - Email (required)
+   - Name (required)
+   - Role (required)
+   - Status (Active/Inactive)
+5. Click **Save**
+
+**What happens behind the scenes:**
+1. User created in PostgreSQL with role
+2. User automatically synced to Auth0
+3. Auth0 sends invitation email
+4. User can login immediately
+5. Role is available in their token
+
+### Updating User Roles (via UI)
+
+1. Navigate to **User Management**
+2. Click **Edit** on any user
+3. Change the role from dropdown
+4. Click **Save**
+
+**What happens behind the scenes:**
+1. Role updated in PostgreSQL (source of truth)
+2. Role synced to Auth0 `app_metadata.role`
+3. Next login, new role is in token
+4. User sees updated permissions immediately
+
+### Role Mismatch Detection
+
+The UI automatically detects when PostgreSQL and Auth0 roles are out of sync:
+- **Yellow badge** appears if roles don't match
+- **Sync button** to manually fix discrepancies
+- **Auto-sync** happens on every role update
+
+## Managing Permissions
+
+### Via UI (Recommended)
+
+1. Login as SuperAdmin
+2. Navigate to **User Management** > **Role Permissions** tab
+3. Select a role from dropdown
+4. Toggle modules on/off
+5. Select specific permissions (Read/Write/Update/Delete)
+6. Click **Save Changes**
+
+Changes take effect immediately - no restart needed.
+
+### Via Database
+
+```sql
+-- View current permissions
+SELECT * FROM role_permissions WHERE role = 'Artist';
+
+-- Update permissions
+UPDATE role_permissions
+SET permissions = '["read", "write"]'::jsonb
+WHERE role = 'Artist' AND module = 'order_management';
+```
 
 ## API Endpoints
+
+### User Management
+- `GET /api/users` - List all users (Admin+)
+- `POST /api/users` - Create user (Admin+)
+- `PUT /api/users/:id` - Update user (Admin+)
+- `DELETE /api/users/:id` - Delete user (SuperAdmin only)
 
 ### Permission Management
 - `GET /api/permissions` - Get all role permissions
 - `GET /api/permissions/:role` - Get specific role permissions
-- `PUT /api/permissions/:role` - Update role permissions
-- `POST /api/permissions/reset` - Reset to default permissions
+- `PUT /api/permissions/:role` - Update role permissions (SuperAdmin only)
 - `GET /api/permissions/user/me` - Get current user permissions
 
-### Module Routes
-All module routes follow this pattern: `/api/modules/{module-name}`
+### Order Management
+- `GET /api/orders` - List orders
+- `POST /api/orders` - Create order
+- `PUT /api/orders/:id` - Update order
+- `DELETE /api/orders/:id` - Delete order
+- `POST /api/orders/:id/upload` - Upload artwork files
 
-Example:
-- `GET /api/modules/order-management/orders`
-- `POST /api/modules/order-management/orders`
-- `PUT /api/modules/order-management/orders/:id`
-- `DELETE /api/modules/order-management/orders/:id`
+### Company Management
+- `GET /api/companies` - List companies
+- `POST /api/companies` - Create company
+- `PUT /api/companies/:id` - Update company
+- `DELETE /api/companies/:id` - Delete company
 
-## User Management Features
+## Key Features
 
-The User Management module allows SuperAdmin to:
-1. View all role-permission mappings
-2. Edit permissions for each role
-3. Toggle module access for roles
-4. Fine-tune CRUD permissions per module
-5. Reset all permissions to defaults
+### 1. Database as Source of Truth
+- All user roles stored in PostgreSQL
+- Auth0 syncs from database (not the other way around)
+- Changes via UI immediately update both DB and Auth0
 
-### How to Use:
-1. Login with SuperAdmin credentials
-2. Navigate to User Management
-3. Select a role from the role selector
-4. Toggle modules on/off
-5. Select specific permissions (read, write, update, delete)
-6. Click "Save Changes"
+### 2. Automatic Auth0 Sync
+- Creating user → Syncs to Auth0 automatically
+- Updating role → Syncs to Auth0 app_metadata
+- Deleting user → Blocks in Auth0 (preserves audit trail)
 
-## Customization
+### 3. Role Mismatch Detection
+- Compares DB role vs Auth0 role
+- Alerts admin if out of sync
+- One-click manual sync available
 
-### Adding New Modules
-1. Add module constant in `server/config/rbac.config.js`
-2. Create routes in `server/routes/modules.routes.js`
-3. Create frontend page component
-4. Add route in `client/src/App.jsx`
-5. Add navigation link in `client/src/components/Layout.jsx`
+### 4. Granular Permissions
+- Per-module permission control
+- Per-role permission configuration
+- CRUD-level permission granularity
 
-### Adding New Roles
-1. Add role constant in `server/config/rbac.config.js`
-2. Add default permissions for the role
-3. Update Auth0 user metadata to assign the role to users
-
-### Modifying Default Permissions
-Edit the `rolePermissions` object in `server/config/rbac.config.js`
-
-## Database Integration
-
-Currently, permissions are stored in-memory. To persist to a database:
-
-1. Create a database schema:
-```sql
-CREATE TABLE role_permissions (
-  id SERIAL PRIMARY KEY,
-  role VARCHAR(50) NOT NULL,
-  module VARCHAR(50) NOT NULL,
-  permissions JSONB NOT NULL,
-  updated_at TIMESTAMP DEFAULT NOW()
-);
+### 5. Order Status Workflow
 ```
-
-2. Update `server/config/rbac.config.js`:
-   - Replace in-memory storage with database queries
-   - Implement `getRolePermissions()` to fetch from DB
-   - Implement `updateRolePermissions()` to save to DB
-
-## Key Differences from Auth0 API Approach
-
-This implementation **does not use Auth0 APIs**:
-
-✅ **What we use:**
-- Auth0 SPA authentication (login/logout)
-- ID tokens with custom claims (user role)
-- Your own backend for RBAC logic
-
-❌ **What we don't use:**
-- Auth0 Management API
-- Auth0 Authorization Extension
-- Access tokens with audience
-- Auth0-managed permissions
-
-**Benefits:**
-- Simpler setup - no API configuration needed
-- Full control over permissions in your backend
-- Easier to customize and extend
-- No additional Auth0 costs for API usage
-
-## Security Considerations
-
-1. **ID Token Validation**: Backend validates Auth0 ID tokens
-2. **RBAC Middleware**: Every module route checks permissions
-3. **Principle of Least Privilege**: Roles have minimal required permissions
-4. **SuperAdmin Protection**: Critical operations require SuperAdmin role
-5. **HTTPS**: Use HTTPS in production
-6. **Environment Variables**: Never commit `.env` files
+Pending → Processing → Ready to Print → In Progress → Completed → Shipped
+```
 
 ## Troubleshooting
 
-### "Unauthorized" errors
-- Check Auth0 configuration matches `.env` files
-- Verify ID token is being sent with requests
-- Check browser console for Auth0 errors
-- Ensure Auth0 Action is deployed and added to Login flow
+### Role Shows "Loading" in UI
 
-### "Forbidden" / "Access Denied"
-- User role doesn't have permission for that module
-- Use User Management to grant permissions
-- Check role is correctly set in Auth0 user metadata
-- Verify Auth0 Action is adding role to ID token
+**Cause:** Token doesn't have `app_role` claim - usually due to Auth0 stripping non-namespaced custom claims
 
-### Mock authentication not working
-- Ensure `NODE_ENV=development` in `.env`
-- Check console logs for "Using mock authentication" message
+**Solution:**
+1. Update Auth0 Action to use **namespaced claims** (`https://yourapp.com/app_role`)
+2. Deploy the updated Action
+3. User must logout completely and login again
+4. Check Auth0 logs for Action execution
 
-### Role not showing in token
-- Verify Auth0 Action is deployed
-- Check Action is in the Login flow
-- Ensure user has `app_metadata.role` set
-- Check namespace in Action matches backend code
+See:
+- [TROUBLESHOOTING_TOKEN_CLAIMS.md](TROUBLESHOOTING_TOKEN_CLAIMS.md) - **Token/claims issues** ⭐ Start here
+- [TROUBLESHOOTING_LOADING_ROLE.md](TROUBLESHOOTING_LOADING_ROLE.md) - General loading issues
+
+### Role Not Syncing to Auth0
+
+**Cause:** Role updated directly in database, bypassing API
+
+**Solution:**
+```bash
+# Force sync role from DB to Auth0
+node scripts/force-sync-role.js user@example.com
+```
+
+### User Can't Login - "Not Authorized"
+
+**Cause:** Auth0 Action is blocking user (old configuration)
+
+**Solution:** Auth0 Action should NOT block users. Update to the minimal version in `auth0-action-add-role-to-token.js`
+
+### "Access Denied" / "Forbidden" Errors
+
+**Cause:** User role doesn't have permission for that module
+
+**Solution:**
+1. Go to User Management > Role Permissions
+2. Select the user's role
+3. Enable the module
+4. Grant required permissions (Read/Write/Update/Delete)
+5. Save changes
+
+## Testing & Verification
+
+### Verify Role Sync
+```bash
+# Check user in database
+node scripts/check-db-user.js user@example.com
+
+# Check user in Auth0
+node scripts/check-auth0-user.js user@example.com
+
+# Test role update sync
+node scripts/test-role-sync.js user@example.com
+```
+
+### Manual Sync (if needed)
+```bash
+# Force sync a single user
+node scripts/force-sync-role.js user@example.com
+
+# Sync all users
+node scripts/sync-all-users.js
+```
 
 ## Production Deployment
 
-1. Set `NODE_ENV=production`
-2. Configure real Auth0 credentials
-3. Use environment variables for sensitive data
-4. Enable HTTPS
-5. Use a production database for permissions
-6. Set up proper logging and monitoring
-7. Configure Auth0 for production domains
+1. **Environment Variables**
+   - Set `NODE_ENV=production`
+   - Use production Auth0 tenant
+   - Configure production database
+
+2. **Auth0 Configuration**
+   - Update Allowed URLs to production domain
+   - Enable MFA (Multi-Factor Authentication)
+   - Configure proper logout redirect
+
+3. **Database**
+   - Enable SSL connections
+   - Set up backups
+   - Configure connection pooling
+
+4. **Security**
+   - Enable HTTPS
+   - Set secure cookie settings
+   - Configure CORS properly
+   - Enable rate limiting
+
+5. **Monitoring**
+   - Set up error logging
+   - Monitor Auth0 logs
+   - Track API performance
+
+## Documentation
+
+- [START_HERE.md](START_HERE.md) - Quick start guide
+- [DATABASE_SETUP.md](DATABASE_SETUP.md) - Database configuration
+- [AUTH0_SETUP_GUIDE.md](AUTH0_SETUP_GUIDE.md) - Auth0 configuration details
+- [SECURITY_MODEL.md](SECURITY_MODEL.md) - Security architecture
+
+### Troubleshooting Guides
+- [TROUBLESHOOTING_TOKEN_CLAIMS.md](TROUBLESHOOTING_TOKEN_CLAIMS.md) - **Role not in token / "Loading" issue** ⭐
+- [TROUBLESHOOTING_LOADING_ROLE.md](TROUBLESHOOTING_LOADING_ROLE.md) - General role loading issues
+- [HOW_TO_FIX_AUTH0_ACTION.md](HOW_TO_FIX_AUTH0_ACTION.md) - Auth0 Action setup & debugging
+
+## Scripts
+
+```bash
+# Database
+npm run db:setup      # Create tables
+npm run db:seed       # Insert default permissions
+npm run db:reset      # Drop and recreate all tables
+
+# Development
+npm run dev           # Start backend only
+npm run client        # Start frontend only
+npm run dev:all       # Start both concurrently
+
+# Testing
+npm run test          # Run tests
+npm run test:auth     # Test Auth0 connection
+npm run test:db       # Test database connection
+
+# User Management
+node scripts/add-user.js <email> <name> <role>
+node scripts/check-db-user.js <email>
+node scripts/check-auth0-user.js <email>
+node scripts/force-sync-role.js <email>
+```
 
 ## License
 
@@ -366,4 +565,12 @@ MIT
 
 ## Support
 
-For issues and questions, please create an issue in the repository.
+For issues and questions:
+- Create an issue: https://github.com/meeraPraveen/RMTLogistics/issues
+- Check documentation in the `/docs` folder
+- Review troubleshooting guides
+
+---
+
+**Built with:** Node.js • React • PostgreSQL • Auth0
+**Architecture:** Database-driven RBAC with Auth0 authentication
