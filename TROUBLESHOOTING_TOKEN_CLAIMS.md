@@ -39,8 +39,8 @@ exports.onExecutePostLogin = async (event, api) => {
 
   if (role) {
     // Use NAMESPACED claim (required by Auth0)
-    api.idToken.setCustomClaim('https://yourapp.com/app_role', role);
-    api.accessToken.setCustomClaim('https://yourapp.com/app_role', role);
+    api.idToken.setCustomClaim('https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_role', role);
+    api.accessToken.setCustomClaim('https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_role', role);
 
     // Also add non-namespaced (for compatibility)
     api.idToken.setCustomClaim('app_role', role);
@@ -54,7 +54,7 @@ exports.onExecutePostLogin = async (event, api) => {
 ```
 
 **Key changes:**
-1. Added **namespaced claim** `https://yourapp.com/app_role` (Auth0 respects this)
+1. Added **namespaced claim** `https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_role` (Auth0 respects this)
 2. Keep non-namespaced `app_role` as fallback
 3. Added detailed console.log statements for debugging
 
@@ -115,7 +115,7 @@ If role still doesn't appear, decode the token:
 
 ```json
 {
-  "https://yourapp.com/app_role": "Production Tech",
+  "https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_role": "Production Tech",
   "app_role": "Production Tech",
   "email": "user@example.com",
   ...
@@ -130,7 +130,7 @@ Auth0 enforces namespace requirements to:
 3. **Compliance** with OpenID Connect specification
 
 **Format:** Use any URL you control (doesn't need to exist):
-- ✅ `https://yourapp.com/app_role`
+- ✅ `https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_role`
 - ✅ `https://mycompany.com/claims/role`
 - ✅ `https://example.com/role`
 - ❌ `app_role` (no namespace)
@@ -141,7 +141,7 @@ Auth0 enforces namespace requirements to:
 The backend middleware already checks for both formats ([auth.middleware.js:57](server/middleware/auth.middleware.js#L57)):
 
 ```javascript
-const auth0Role = req.auth.app_role || req.auth['https://yourapp.com/app_role'];
+const auth0Role = req.auth.app_role || req.auth['https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_role'];
 ```
 
 So the updated Action (which sets both) will work immediately.
@@ -155,7 +155,7 @@ api.idToken.setCustomClaim('app_role', role);  // Gets stripped by Auth0
 
 ### ✅ Fix: Use Namespaced Claim
 ```javascript
-api.idToken.setCustomClaim('https://yourapp.com/app_role', role);
+api.idToken.setCustomClaim('https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_role', role);
 ```
 
 ### ❌ Mistake 2: Not Redeploying Action
@@ -223,5 +223,5 @@ If you see errors related to the Action, fix the code and redeploy.
 ## Summary
 
 **Problem:** Non-namespaced custom claims get stripped by Auth0
-**Solution:** Use namespaced format `https://yourapp.com/app_role`
+**Solution:** Use namespaced format `https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_role`
 **Required:** Redeploy Action + Clear session + Login again

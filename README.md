@@ -435,7 +435,7 @@ Pending → Processing → Ready to Print → In Progress → Completed → Ship
 **Cause:** Token doesn't have `app_role` claim - usually due to Auth0 stripping non-namespaced custom claims
 
 **Solution:**
-1. Update Auth0 Action to use **namespaced claims** (`https://yourapp.com/app_role`)
+1. Update Auth0 Action to use **namespaced claims** (`https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_role`)
 2. Deploy the updated Action
 3. User must logout completely and login again
 4. Check Auth0 logs for Action execution

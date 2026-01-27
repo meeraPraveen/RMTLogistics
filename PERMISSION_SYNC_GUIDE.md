@@ -72,8 +72,8 @@ Production Tech | printing_software    | ["read","write","update"]
 ### JWT Token (Custom Claims)
 ```json
 {
-  "https://yourapp.com/app_role": "Admin",
-  "https://yourapp.com/app_permissions": {
+  "https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_role": "Admin",
+  "https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_permissions": {
     "order_management": ["read", "write", "update", "delete"],
     "inventory_management": ["read", "write", "update", "delete"],
     "printing_software": ["read", "write", "update", "delete"]
@@ -148,14 +148,14 @@ exports.onExecutePostLogin = async (event, api) => {
 
   // Add role to token
   if (role) {
-    api.idToken.setCustomClaim('https://yourapp.com/app_role', role);
-    api.accessToken.setCustomClaim('https://yourapp.com/app_role', role);
+    api.idToken.setCustomClaim('https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_role', role);
+    api.accessToken.setCustomClaim('https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_role', role);
   }
 
   // Add permissions to token (NEW)
   if (permissions) {
-    api.idToken.setCustomClaim('https://yourapp.com/app_permissions', permissions);
-    api.accessToken.setCustomClaim('https://yourapp.com/app_permissions', permissions);
+    api.idToken.setCustomClaim('https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_permissions', permissions);
+    api.accessToken.setCustomClaim('https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_permissions', permissions);
 
     console.log(`[Auth0 Action] ✅ Added permissions to token for modules:`, Object.keys(permissions));
   }
@@ -254,7 +254,7 @@ const token = localStorage.getItem('id_token');
 const decoded = jwt_decode(token);
 
 // Access permissions
-const permissions = decoded['https://yourapp.com/app_permissions'];
+const permissions = decoded['https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_permissions'];
 
 // Check permission
 function hasPermission(module, action) {

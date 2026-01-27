@@ -54,12 +54,12 @@ export const extractUserInfo = async (req, res, next) => {
       const email = req.auth.email;
 
       // Auth0 role is only used for initial access check (done by Auth0 Action)
-      const auth0Role = req.auth.app_role || req.auth['https://yourapp.com/app_role'];
+      const auth0Role = req.auth.app_role || req.auth['https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_role'];
 
       console.log(`🔐 Auth0 authenticated user: ${email} (${auth0UserId})`);
       console.log(`🔍 Token claims:`, JSON.stringify({
         app_role: req.auth.app_role,
-        namespaced_role: req.auth['https://yourapp.com/app_role'],
+        namespaced_role: req.auth['https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_role'],
         all_claims: Object.keys(req.auth)
       }));
 

@@ -34,12 +34,12 @@ Frontend/Backend receives permissions in token
 
 2. **Auth0 Action**:
    - `auth0-action-add-role-to-token.js` - Now adds both role AND permissions to token
-   - Permissions added as `https://yourapp.com/app_permissions` custom claim
+   - Permissions added as `https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_permissions` custom claim
    - Example token payload:
      ```json
      {
-       "https://yourapp.com/app_role": "Admin",
-       "https://yourapp.com/app_permissions": {
+       "https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_role": "Admin",
+       "https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_permissions": {
          "order_management": ["read", "write", "update", "delete"],
          "inventory_management": ["read", "write", "update", "delete"],
          "printing_software": ["read", "write", "update", "delete"]
@@ -70,10 +70,10 @@ node scripts/sync-all-permissions.js
 ### Fixed - Auth0 Token Claims Issue
 **Problem**: Users seeing "Loading" role in UI because Auth0 was stripping non-namespaced custom claims from tokens.
 
-**Root Cause**: Auth0 security policy removes custom claims that don't use proper namespace format (e.g., `app_role` gets stripped, but `https://yourapp.com/app_role` is preserved).
+**Root Cause**: Auth0 security policy removes custom claims that don't use proper namespace format (e.g., `app_role` gets stripped, but `https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_role` is preserved).
 
 **Solution**:
-- Updated Auth0 Action to use namespaced claims: `https://yourapp.com/app_role`
+- Updated Auth0 Action to use namespaced claims: `https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_role`
 - Added enhanced debugging with console.log statements
 - Created comprehensive troubleshooting guide: [TROUBLESHOOTING_TOKEN_CLAIMS.md](TROUBLESHOOTING_TOKEN_CLAIMS.md)
 

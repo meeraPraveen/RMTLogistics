@@ -48,8 +48,8 @@ exports.onExecutePostLogin = async (event, api) => {
   // Add role to token if it exists
   if (role) {
     // Use both namespaced and non-namespaced claims for compatibility
-    api.idToken.setCustomClaim('https://yourapp.com/app_role', role);
-    api.accessToken.setCustomClaim('https://yourapp.com/app_role', role);
+    api.idToken.setCustomClaim('https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_role', role);
+    api.accessToken.setCustomClaim('https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_role', role);
 
     // Also try non-namespaced (some Auth0 configurations allow this)
     api.idToken.setCustomClaim('app_role', role);
@@ -62,8 +62,8 @@ exports.onExecutePostLogin = async (event, api) => {
 
   // Add permissions to token if they exist
   if (permissions) {
-    api.idToken.setCustomClaim('https://yourapp.com/app_permissions', permissions);
-    api.accessToken.setCustomClaim('https://yourapp.com/app_permissions', permissions);
+    api.idToken.setCustomClaim('https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_permissions', permissions);
+    api.accessToken.setCustomClaim('https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_permissions', permissions);
 
     // Also try non-namespaced
     api.idToken.setCustomClaim('app_permissions', permissions);
