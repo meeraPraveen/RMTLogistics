@@ -37,9 +37,10 @@ export const createAuth0User = async (userData) => {
       email_verified: false, // User will verify via email
       verify_email: true, // Send verification email
 
-      // Store PostgreSQL role in Auth0 metadata
+      // Store PostgreSQL role and permissions in Auth0 metadata
       app_metadata: {
         role: userData.role,
+        permissions: userData.permissions || {},
         db_synced: true,
         synced_at: new Date().toISOString()
       },
@@ -97,10 +98,11 @@ export const updateAuth0User = async (auth0UserId, updates) => {
       updateData.name = updates.name;
     }
 
-    // Update role in app_metadata if provided
-    if (updates.role) {
+    // Update role and permissions in app_metadata if provided
+    if (updates.role || updates.permissions) {
       updateData.app_metadata = {
-        role: updates.role,
+        ...(updates.role && { role: updates.role }),
+        ...(updates.permissions && { permissions: updates.permissions }),
         db_synced: true,
         synced_at: new Date().toISOString()
       };

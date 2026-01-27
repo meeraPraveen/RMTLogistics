@@ -247,10 +247,16 @@ export const createUser = async (userData, createdBy) => {
 
     // Step 2: Sync to Auth0 for authentication
     try {
+      // Fetch permissions for the role
+      const { getRolePermissions } = await import('./permissions.service.js');
+      const permissions = await getRolePermissions(dbUser.role);
+      console.log(`📋 Syncing permissions for new user with role ${dbUser.role}:`, JSON.stringify(permissions));
+
       const auth0Result = await createAuth0User({
         email: dbUser.email,
         name: dbUser.name,
-        role: dbUser.role
+        role: dbUser.role,
+        permissions: permissions
       });
 
       // Step 3: Update PostgreSQL with Auth0 user ID
@@ -333,11 +339,19 @@ export const updateUser = async (userId, userData) => {
       try {
         const auth0Updates = {};
         if (name !== undefined) auth0Updates.name = name;
-        if (role !== undefined) auth0Updates.role = role;
+        if (role !== undefined) {
+          auth0Updates.role = role;
+
+          // Fetch and sync permissions for the role
+          const { getRolePermissions } = await import('./permissions.service.js');
+          const permissions = await getRolePermissions(role);
+          auth0Updates.permissions = permissions;
+          console.log(`📋 Syncing permissions for role ${role}:`, JSON.stringify(permissions));
+        }
         if (is_active !== undefined) auth0Updates.blocked = !is_active;
 
         await updateAuth0User(dbUser.auth0_user_id, auth0Updates);
-        console.log(`✅ User ${dbUser.email} updated and synced to Auth0`);
+        console.log(`✅ User ${dbUser.email} updated and synced to Auth0 (role + permissions)`);
       } catch (auth0Error) {
         console.error(`⚠️  User updated in DB but Auth0 sync failed for ${dbUser.email}:`, auth0Error.message);
         // Continue - DB is source of truth

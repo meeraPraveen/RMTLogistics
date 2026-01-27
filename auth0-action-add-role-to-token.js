@@ -36,12 +36,14 @@
  * @param {PostLoginAPI} api - Interface whose methods can be used to change the behavior of the login.
  */
 exports.onExecutePostLogin = async (event, api) => {
-  // Get user's role from app_metadata (synced from PostgreSQL database)
+  // Get user's role and permissions from app_metadata (synced from PostgreSQL database)
   const role = event.user.app_metadata?.role;
+  const permissions = event.user.app_metadata?.permissions;
 
   console.log(`[Auth0 Action] User login: ${event.user.email}`);
   console.log(`[Auth0 Action] app_metadata:`, JSON.stringify(event.user.app_metadata));
   console.log(`[Auth0 Action] role found:`, role);
+  console.log(`[Auth0 Action] permissions found:`, permissions ? Object.keys(permissions) : 'none');
 
   // Add role to token if it exists
   if (role) {
@@ -56,6 +58,20 @@ exports.onExecutePostLogin = async (event, api) => {
     console.log(`[Auth0 Action] ✅ Added role to token: ${role}`);
   } else {
     console.log(`[Auth0 Action] ⚠️  No role in app_metadata - user may be blocked`);
+  }
+
+  // Add permissions to token if they exist
+  if (permissions) {
+    api.idToken.setCustomClaim('https://yourapp.com/app_permissions', permissions);
+    api.accessToken.setCustomClaim('https://yourapp.com/app_permissions', permissions);
+
+    // Also try non-namespaced
+    api.idToken.setCustomClaim('app_permissions', permissions);
+    api.accessToken.setCustomClaim('app_permissions', permissions);
+
+    console.log(`[Auth0 Action] ✅ Added permissions to token for modules:`, Object.keys(permissions));
+  } else {
+    console.log(`[Auth0 Action] ⚠️  No permissions in app_metadata`);
   }
 };
 

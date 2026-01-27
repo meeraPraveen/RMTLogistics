@@ -4,6 +4,69 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-01-27
 
+### Added - Permission Sync to Auth0
+**Feature**: Permissions are now automatically synced to Auth0 along with roles.
+
+**Why**: Previously only roles were synced to Auth0 `app_metadata.role`. Now the full permission structure (module-level permissions) is also synced to `app_metadata.permissions`, enabling:
+- Frontend applications to check permissions without API calls
+- Offline permission checks
+- Better performance for permission-based UI rendering
+- Consistent permissions across all Auth0 tokens
+
+**How It Works**:
+```
+Database (role_permissions table)
+  ↓
+Fetch permissions for user's role
+  ↓
+Sync to Auth0 app_metadata.permissions
+  ↓
+Auth0 Action adds to token as custom claim
+  ↓
+Frontend/Backend receives permissions in token
+```
+
+**Changes**:
+1. **Backend**:
+   - `auth0.service.js` - Updated `updateAuth0User()` and `createAuth0User()` to sync permissions
+   - `user.service.js` - Added permission fetching in `createUser()` and `updateUser()`
+   - New sync script: `scripts/sync-all-permissions.js` - Syncs permissions for existing users
+
+2. **Auth0 Action**:
+   - `auth0-action-add-role-to-token.js` - Now adds both role AND permissions to token
+   - Permissions added as `https://yourapp.com/app_permissions` custom claim
+   - Example token payload:
+     ```json
+     {
+       "https://yourapp.com/app_role": "Admin",
+       "https://yourapp.com/app_permissions": {
+         "order_management": ["read", "write", "update", "delete"],
+         "inventory_management": ["read", "write", "update", "delete"],
+         "printing_software": ["read", "write", "update", "delete"]
+       }
+     }
+     ```
+
+3. **Scripts**:
+   - `scripts/sync-all-permissions.js` - Syncs permissions to Auth0 for all existing users
+
+**Testing**:
+```bash
+# Sync permissions for all existing users
+node scripts/sync-all-permissions.js
+```
+
+**Benefits**:
+- ✅ Permissions available in token without database lookup
+- ✅ Faster permission checks in frontend
+- ✅ Consistent permission state across app
+- ✅ Automatic sync when user role changes
+- ✅ Single source of truth (database) with Auth0 as sync target
+
+---
+
+## [Earlier Changes] - 2026-01-27
+
 ### Fixed - Auth0 Token Claims Issue
 **Problem**: Users seeing "Loading" role in UI because Auth0 was stripping non-namespaced custom claims from tokens.
 
