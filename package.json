@@ -1,0 +1,30 @@
+{
+  "name": "auth0-rbac-app",
+  "version": "1.0.0",
+  "description": "Modular application with Auth0 authentication and RBAC",
+  "main": "server/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "nodemon server/index.js",
+    "client": "cd client && npm run dev",
+    "dev:all": "concurrently \"npm run dev\" \"npm run client\"",
+    "db:setup": "node scripts/setup-db.js",
+    "db:setup:psql": "psql -U postgres -f database/schema.sql",
+    "db:seed:psql": "psql -U postgres -f database/seed.sql"
+  },
+  "dependencies": {
+    "auth0": "^5.2.0",
+    "axios": "^1.13.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "pg": "^8.11.3"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.0.1"
+  }
+}
