@@ -528,6 +528,8 @@ node scripts/sync-all-users.js
 - [DATABASE_SETUP.md](DATABASE_SETUP.md) - Database configuration
 - [AUTH0_SETUP_GUIDE.md](AUTH0_SETUP_GUIDE.md) - Auth0 configuration details
 - [SECURITY_MODEL.md](SECURITY_MODEL.md) - Security architecture
+- [PERMISSION_SYNC_GUIDE.md](PERMISSION_SYNC_GUIDE.md) - **Permission sync to Auth0** 🆕
+- [CHANGELOG.md](CHANGELOG.md) - Change history
 
 ### Troubleshooting Guides
 - [TROUBLESHOOTING_TOKEN_CLAIMS.md](TROUBLESHOOTING_TOKEN_CLAIMS.md) - **Role not in token / "Loading" issue** ⭐
