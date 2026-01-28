@@ -1,8 +1,8 @@
 /**
- * Auth0 Action: Add Role to Token
+ * Auth0 Action: Add Role and Permissions to Token
  *
- * This action adds the user's role from app_metadata to the ID and access tokens.
- * The role is synced from PostgreSQL database (source of truth) to Auth0 app_metadata.
+ * This action adds the user's role and permissions from app_metadata to the ID and access tokens.
+ * The role and permissions are synced from PostgreSQL database (source of truth) to Auth0 app_metadata.
  *
  * FLOW:
  * 1. User logs in

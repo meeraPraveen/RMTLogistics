@@ -1,14 +1,49 @@
-import { hasPermission, hasModuleAccess } from '../config/rbac.config.js';
+/**
+ * Token-based permission checking functions
+ * These check permissions from req.user.permissions (populated from JWT token)
+ * No database queries - fast and scalable
+ */
+
+/**
+ * Check if user has access to a module (has any permission for it)
+ * @param {Object} userPermissions - Permissions object from token
+ * @param {string} module - Module name
+ * @returns {boolean}
+ */
+const hasModuleAccessFromToken = (userPermissions, module) => {
+  if (!userPermissions || typeof userPermissions !== 'object') {
+    return false;
+  }
+  const modulePerms = userPermissions[module];
+  return Array.isArray(modulePerms) && modulePerms.length > 0;
+};
+
+/**
+ * Check if user has a specific permission for a module
+ * @param {Object} userPermissions - Permissions object from token
+ * @param {string} module - Module name
+ * @param {string} permission - Permission name (read, write, update, delete)
+ * @returns {boolean}
+ */
+const hasPermissionFromToken = (userPermissions, module, permission) => {
+  if (!userPermissions || typeof userPermissions !== 'object') {
+    return false;
+  }
+  const modulePerms = userPermissions[module];
+  return Array.isArray(modulePerms) && modulePerms.includes(permission);
+};
 
 /**
  * RBAC Middleware - Checks if user has access to a specific module
+ * TOKEN-BASED: Uses permissions from JWT token (req.user.permissions)
  * Usage: requireModule(MODULES.ORDER_MANAGEMENT)
  */
 export const requireModule = (module) => {
-  return async (req, res, next) => {
+  return (req, res, next) => {
     const userRole = req.user?.role;
+    const userPermissions = req.user?.permissions;
 
-    console.log(`🔍 RBAC Check - Module: ${module}, User Role: ${userRole}, User:`, req.user?.email);
+    console.log(`🔍 Token-based RBAC - Module: ${module}, User: ${req.user?.email}, Role: ${userRole}`);
 
     if (!userRole) {
       return res.status(401).json({
@@ -17,9 +52,9 @@ export const requireModule = (module) => {
       });
     }
 
-    const hasAccess = await hasModuleAccess(userRole, module);
+    const hasAccess = hasModuleAccessFromToken(userPermissions, module);
 
-    console.log(`🔍 hasModuleAccess result for ${userRole} on ${module}:`, hasAccess);
+    console.log(`🎫 Token permissions check - Module: ${module}, Has Access: ${hasAccess}`);
 
     if (!hasAccess) {
       return res.status(403).json({
@@ -36,11 +71,13 @@ export const requireModule = (module) => {
 
 /**
  * RBAC Middleware - Checks if user has a specific permission for a module
+ * TOKEN-BASED: Uses permissions from JWT token (req.user.permissions)
  * Usage: requirePermission(MODULES.ORDER_MANAGEMENT, PERMISSIONS.WRITE)
  */
 export const requirePermission = (module, permission) => {
-  return async (req, res, next) => {
+  return (req, res, next) => {
     const userRole = req.user?.role;
+    const userPermissions = req.user?.permissions;
 
     if (!userRole) {
       return res.status(401).json({
@@ -49,7 +86,9 @@ export const requirePermission = (module, permission) => {
       });
     }
 
-    const permitted = await hasPermission(userRole, module, permission);
+    const permitted = hasPermissionFromToken(userPermissions, module, permission);
+
+    console.log(`🎫 Token permission check - Module: ${module}, Permission: ${permission}, Granted: ${permitted}`);
 
     if (!permitted) {
       return res.status(403).json({
