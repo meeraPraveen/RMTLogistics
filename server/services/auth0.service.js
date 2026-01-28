@@ -10,6 +10,19 @@ dotenv.config();
  * Purpose: Sync user data from PostgreSQL (source of truth) to Auth0
  */
 
+/**
+ * Generate a secure temporary password for new users
+ * User will reset this via the password change email
+ */
+const generateTempPassword = () => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
+  let password = '';
+  for (let i = 0; i < 24; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return password;
+};
+
 // Initialize Auth0 Management Client
 const auth0Management = new ManagementClient({
   domain: process.env.AUTH0_MGMT_DOMAIN,
@@ -33,11 +46,13 @@ export const createAuth0User = async (userData) => {
     const auth0User = await auth0Management.users.create({
       email: userData.email,
       name: userData.name,
-      connection: 'google-oauth2',
-      email_verified: false, // User will verify via email
-      verify_email: true, // Send verification email
+      connection: 'Username-Password-Authentication',
+      password: generateTempPassword(),
+      email_verified: false,
+      verify_email: true,
 
       // Store PostgreSQL role and permissions in Auth0 metadata
+      // The Auth0 Action reads these and adds them to the token
       app_metadata: {
         role: userData.role,
         permissions: userData.permissions || {},
