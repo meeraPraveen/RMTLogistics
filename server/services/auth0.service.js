@@ -33,7 +33,7 @@ export const createAuth0User = async (userData) => {
     const auth0User = await auth0Management.users.create({
       email: userData.email,
       name: userData.name,
-      connection: 'google-oauth2', // Change to 'Username-Password-Authentication' if using email/password
+      connection: 'google-oauth2',
       email_verified: false, // User will verify via email
       verify_email: true, // Send verification email
 
@@ -138,26 +138,17 @@ export const updateAuth0User = async (auth0UserId, updates) => {
 };
 
 /**
- * Delete (block) a user in Auth0
- * Note: We block instead of delete to preserve audit trails
+ * Delete a user from Auth0
  * @param {string} auth0UserId - Auth0 user ID
  * @returns {Promise<Object>}
  */
 export const deleteAuth0User = async (auth0UserId) => {
   try {
-    console.log(`📤 Blocking user in Auth0: ${auth0UserId}`);
+    console.log(`📤 Deleting user from Auth0: ${auth0UserId}`);
 
-    // Option 1: Block user (recommended - preserves data)
-    await auth0Management.users.update(
-      auth0UserId,
-      { blocked: true }
-    );
+    await auth0Management.users.delete({ id: auth0UserId });
 
-    console.log(`✅ User blocked in Auth0: ${auth0UserId}`);
-
-    // Option 2: Permanently delete (uncomment if you want hard delete)
-    // await auth0Management.users.delete({ id: auth0UserId });
-    // console.log(`✅ User deleted from Auth0: ${auth0UserId}`);
+    console.log(`✅ User deleted from Auth0: ${auth0UserId}`);
 
     return { auth0_user_id: auth0UserId, deleted: true };
 
