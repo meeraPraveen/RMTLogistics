@@ -428,6 +428,24 @@
   background: #fecaca;
 }
 
+.disable-btn {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.disable-btn:hover {
+  background: #fde68a;
+}
+
+.enable-btn {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.enable-btn:hover {
+  background: #a7f3d0;
+}
+
 /* Pagination */
 .pagination {
   display: flex;

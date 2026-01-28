@@ -146,6 +146,34 @@ const UserManagement = () => {
     }
   };
 
+  const handleToggleUserStatus = async (user) => {
+    const isActive = user.is_active;
+    const action = isActive ? 'disable' : 'enable';
+
+    if (!window.confirm(`Are you sure you want to ${action} user ${user.email}?`)) {
+      return;
+    }
+
+    try {
+      const idToken = await getIdTokenClaims();
+      setAuthToken(idToken.__raw);
+
+      if (isActive) {
+        await usersApi.suspend(user.auth0_user_id);
+        setMessage({ type: 'success', text: `User ${user.email} has been disabled` });
+      } else {
+        await usersApi.reactivate(user.auth0_user_id);
+        setMessage({ type: 'success', text: `User ${user.email} has been enabled` });
+      }
+
+      loadUsers();
+      setTimeout(() => setMessage(null), 3000);
+    } catch (error) {
+      console.error(`Failed to ${action} user:`, error);
+      setMessage({ type: 'error', text: error.response?.data?.message || `Failed to ${action} user` });
+    }
+  };
+
   const handleModalSave = async (formData) => {
     try {
       const idToken = await getIdTokenClaims();
@@ -322,6 +350,15 @@ const UserManagement = () => {
                               title="Edit User"
                             >
                               Edit
+                            </button>
+                          )}
+                          {isSuperAdmin && (
+                            <button
+                              className={`action-btn ${user.is_active ? 'disable-btn' : 'enable-btn'}`}
+                              onClick={() => handleToggleUserStatus(user)}
+                              title={user.is_active ? 'Disable User' : 'Enable User'}
+                            >
+                              {user.is_active ? 'Disable' : 'Enable'}
                             </button>
                           )}
                           {isSuperAdmin && (

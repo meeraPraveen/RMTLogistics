@@ -57,7 +57,9 @@ export const usersApi = {
   getAll: (params) => api.get('/users', { params }),
   create: (userData) => api.post('/users', userData),
   update: (id, userData) => api.put(`/users/${id}`, userData),
-  delete: (id) => api.delete(`/users/${id}`)
+  delete: (id) => api.delete(`/users/${id}`),
+  suspend: (auth0UserId) => api.post(`/users/${encodeURIComponent(auth0UserId)}/suspend`),
+  reactivate: (auth0UserId) => api.post(`/users/${encodeURIComponent(auth0UserId)}/reactivate`)
 };
 
 // Orders API
