@@ -153,29 +153,30 @@ export const updateAuth0User = async (auth0UserId, updates) => {
 };
 
 /**
- * Delete a user from Auth0
+ * Block a user in Auth0 (used for delete/disable operations)
+ * We block instead of delete to preserve audit trails and allow recovery
  * @param {string} auth0UserId - Auth0 user ID
  * @returns {Promise<Object>}
  */
 export const deleteAuth0User = async (auth0UserId) => {
   try {
-    console.log(`📤 Deleting user from Auth0: ${auth0UserId}`);
+    console.log(`📤 Blocking user in Auth0: ${auth0UserId}`);
 
-    await auth0Management.users.delete({ id: auth0UserId });
+    await auth0Management.users.update(auth0UserId, { blocked: true });
 
-    console.log(`✅ User deleted from Auth0: ${auth0UserId}`);
+    console.log(`✅ User blocked in Auth0: ${auth0UserId}`);
 
-    return { auth0_user_id: auth0UserId, deleted: true };
+    return { auth0_user_id: auth0UserId, blocked: true };
 
   } catch (error) {
-    console.error(`❌ Error deleting user in Auth0:`, error);
+    console.error(`❌ Error blocking user in Auth0:`, error);
 
     if (error.statusCode === 404) {
       console.warn(`⚠️  User ${auth0UserId} not found in Auth0`);
-      return { auth0_user_id: auth0UserId, deleted: false, error: 'User not found' };
+      return { auth0_user_id: auth0UserId, blocked: false, error: 'User not found' };
     }
 
-    throw new Error(`Failed to delete user in Auth0: ${error.message}`);
+    throw new Error(`Failed to block user in Auth0: ${error.message}`);
   }
 };
 
@@ -212,17 +213,24 @@ const syncExistingAuth0User = async (userData) => {
       throw new Error('User not found in Auth0');
     }
 
-    // Update Auth0 user with PostgreSQL data
+    console.log(`🔄 Syncing existing Auth0 user: ${userData.email} (blocked: ${auth0User.blocked})`);
+
+    // Update Auth0 user: unblock + sync role + permissions
     await updateAuth0User(auth0User.user_id, {
       name: userData.name,
-      role: userData.role
+      role: userData.role,
+      permissions: userData.permissions || {},
+      blocked: false  // Unblock user if they were previously blocked
     });
+
+    console.log(`✅ User ${userData.email} unblocked and synced with role: ${userData.role}`);
 
     return {
       auth0_user_id: auth0User.user_id,
       email: auth0User.email,
       created: false,
-      synced: true
+      synced: true,
+      unblocked: auth0User.blocked === true
     };
 
   } catch (error) {

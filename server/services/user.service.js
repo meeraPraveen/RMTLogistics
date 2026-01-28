@@ -540,6 +540,8 @@ export const suspendUser = async (auth0UserId) => {
  */
 export const reactivateUser = async (auth0UserId) => {
   try {
+    console.log(`🔄 Reactivating user: ${auth0UserId}`);
+
     // Step 1: Update PostgreSQL (source of truth)
     const result = await query(
       `UPDATE users
@@ -554,15 +556,31 @@ export const reactivateUser = async (auth0UserId) => {
     }
 
     const dbUser = result.rows[0];
+    console.log(`✅ User ${dbUser.email} reactivated in DB with role: ${dbUser.role}`);
 
-    // Step 2: Sync to Auth0 (unblock user)
+    // Step 2: Sync to Auth0 (unblock user and sync role/permissions)
     if (auth0UserId && !auth0UserId.startsWith('pending_')) {
       try {
-        await updateAuth0User(auth0UserId, { blocked: false });
-        console.log(`✅ User ${dbUser.email} reactivated and unblocked in Auth0`);
+        // Fetch permissions for the user's role
+        const { getRolePermissions } = await import('../config/rbac.config.js');
+        const permissions = await getRolePermissions(dbUser.role);
+        console.log(`📋 Fetched permissions for role ${dbUser.role}:`, JSON.stringify(permissions));
+
+        // Unblock and sync role + permissions to Auth0
+        console.log(`📤 Syncing to Auth0: unblock + role (${dbUser.role}) + permissions`);
+        const auth0Result = await updateAuth0User(auth0UserId, {
+          blocked: false,
+          role: dbUser.role,
+          permissions: permissions
+        });
+        console.log(`✅ Auth0 sync result:`, JSON.stringify(auth0Result));
+        console.log(`✅ User ${dbUser.email} reactivated, unblocked, and synced role/permissions to Auth0`);
       } catch (auth0Error) {
         console.error(`⚠️  User reactivated in DB but Auth0 sync failed for ${dbUser.email}:`, auth0Error.message);
+        console.error(`⚠️  Full error:`, auth0Error);
       }
+    } else {
+      console.log(`ℹ️  Skipping Auth0 sync for pending user: ${auth0UserId}`);
     }
 
     return dbUser;

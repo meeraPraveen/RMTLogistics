@@ -321,6 +321,7 @@ router.put('/:auth0UserId/role', requireSuperAdmin, async (req, res) => {
 router.post('/:auth0UserId/suspend', requireSuperAdmin, async (req, res) => {
   try {
     const { auth0UserId } = req.params;
+    console.log(`📥 Suspend request received for: ${auth0UserId}`);
 
     const user = await suspendUser(auth0UserId);
 
@@ -351,6 +352,7 @@ router.post('/:auth0UserId/suspend', requireSuperAdmin, async (req, res) => {
 router.post('/:auth0UserId/reactivate', requireSuperAdmin, async (req, res) => {
   try {
     const { auth0UserId } = req.params;
+    console.log(`📥 Reactivate request received for: ${auth0UserId}`);
 
     const user = await reactivateUser(auth0UserId);
 
