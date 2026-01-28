@@ -1,5 +1,7 @@
 import { query } from '../config/database.js';
 import { createAuth0User, updateAuth0User, deleteAuth0User } from './auth0.service.js';
+import { withRetry, isRetryableAuth0Error } from '../utils/retry.js';
+import { queueFailedSync } from './failedSync.service.js';
 
 /**
  * User Service - Handles user-role database operations
@@ -390,14 +392,38 @@ export const deleteUser = async (userId) => {
       [userId]
     );
 
-    // Step 3: Block user in Auth0 (we block instead of delete to preserve audit trails)
+    // Step 3: Delete user from Auth0 with retry logic
     if (user.auth0_user_id && !user.auth0_user_id.startsWith('pending_')) {
       try {
-        await deleteAuth0User(user.auth0_user_id);
-        console.log(`✅ User ${user.email} deleted from DB and blocked in Auth0`);
+        // Attempt deletion with retry (3 attempts with exponential backoff)
+        await withRetry(
+          () => deleteAuth0User(user.auth0_user_id),
+          {
+            maxRetries: 3,
+            baseDelay: 1000,
+            shouldRetry: isRetryableAuth0Error,
+            onRetry: ({ attempt, maxRetries, error }) => {
+              console.log(`⏳ Auth0 deletion retry ${attempt}/${maxRetries} for ${user.email}: ${error.message}`);
+            }
+          }
+        );
+        console.log(`✅ User ${user.email} deleted from DB and Auth0`);
       } catch (auth0Error) {
-        console.error(`⚠️  User deleted from DB but Auth0 block failed for ${user.email}:`, auth0Error.message);
-        // Continue - DB is source of truth
+        console.error(`⚠️  User deleted from DB but Auth0 deletion failed for ${user.email}:`, auth0Error.message);
+
+        // Queue for later retry if retries exhausted
+        try {
+          await queueFailedSync({
+            type: 'delete',
+            auth0UserId: user.auth0_user_id,
+            email: user.email,
+            payload: { auth0_user_id: user.auth0_user_id },
+            errorMessage: auth0Error.message
+          });
+          console.log(`📋 Queued Auth0 deletion for ${user.email} for later retry`);
+        } catch (queueError) {
+          console.error(`❌ Failed to queue Auth0 deletion for ${user.email}:`, queueError.message);
+        }
       }
     }
 
@@ -475,6 +501,7 @@ export const activateUser = async (auth0UserId, email) => {
  */
 export const suspendUser = async (auth0UserId) => {
   try {
+    // Step 1: Update PostgreSQL (source of truth)
     const result = await query(
       `UPDATE users
        SET is_active = false, updated_at = CURRENT_TIMESTAMP
@@ -483,7 +510,23 @@ export const suspendUser = async (auth0UserId) => {
       [auth0UserId]
     );
 
-    return result.rows[0];
+    if (result.rows.length === 0) {
+      throw new Error(`User with Auth0 ID ${auth0UserId} not found`);
+    }
+
+    const dbUser = result.rows[0];
+
+    // Step 2: Sync to Auth0 (block user)
+    if (auth0UserId && !auth0UserId.startsWith('pending_')) {
+      try {
+        await updateAuth0User(auth0UserId, { blocked: true });
+        console.log(`✅ User ${dbUser.email} suspended and blocked in Auth0`);
+      } catch (auth0Error) {
+        console.error(`⚠️  User suspended in DB but Auth0 sync failed for ${dbUser.email}:`, auth0Error.message);
+      }
+    }
+
+    return dbUser;
   } catch (error) {
     console.error('Error suspending user:', error);
     throw error;
@@ -497,6 +540,7 @@ export const suspendUser = async (auth0UserId) => {
  */
 export const reactivateUser = async (auth0UserId) => {
   try {
+    // Step 1: Update PostgreSQL (source of truth)
     const result = await query(
       `UPDATE users
        SET is_active = true, updated_at = CURRENT_TIMESTAMP
@@ -505,7 +549,23 @@ export const reactivateUser = async (auth0UserId) => {
       [auth0UserId]
     );
 
-    return result.rows[0];
+    if (result.rows.length === 0) {
+      throw new Error(`User with Auth0 ID ${auth0UserId} not found`);
+    }
+
+    const dbUser = result.rows[0];
+
+    // Step 2: Sync to Auth0 (unblock user)
+    if (auth0UserId && !auth0UserId.startsWith('pending_')) {
+      try {
+        await updateAuth0User(auth0UserId, { blocked: false });
+        console.log(`✅ User ${dbUser.email} reactivated and unblocked in Auth0`);
+      } catch (auth0Error) {
+        console.error(`⚠️  User reactivated in DB but Auth0 sync failed for ${dbUser.email}:`, auth0Error.message);
+      }
+    }
+
+    return dbUser;
   } catch (error) {
     console.error('Error reactivating user:', error);
     throw error;

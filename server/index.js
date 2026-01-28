@@ -7,6 +7,7 @@ import modulesRouter from './routes/modules.routes.js';
 import usersRouter from './routes/users.routes.js';
 import ordersRouter from './routes/orders.routes.js';
 import companiesRouter from './routes/companies.routes.js';
+import adminRouter from './routes/admin.routes.js';
 
 dotenv.config();
 
@@ -42,6 +43,7 @@ app.use('/api/users', usersRouter);
 app.use('/api/modules', modulesRouter);
 app.use('/api/orders', ordersRouter);
 app.use('/api/companies', companiesRouter);
+app.use('/api/admin', adminRouter);
 
 // Welcome endpoint
 app.get('/api', (req, res) => {
@@ -55,6 +57,7 @@ app.get('/api', (req, res) => {
     endpoints: {
       permissions: '/api/permissions',
       users: '/api/users',
+      admin: '/api/admin',
       userManagement: '/api/modules/user-management',
       orderManagement: '/api/modules/order-management',
       inventoryManagement: '/api/modules/inventory-management',
