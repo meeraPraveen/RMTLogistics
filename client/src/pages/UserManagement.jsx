@@ -352,7 +352,7 @@ const UserManagement = () => {
                               Edit
                             </button>
                           )}
-                          {isSuperAdmin && (
+                          {isSuperAdmin && user.role !== 'SuperAdmin' && (
                             <button
                               className={`action-btn ${user.is_active ? 'disable-btn' : 'enable-btn'}`}
                               onClick={() => handleToggleUserStatus(user)}
@@ -361,7 +361,7 @@ const UserManagement = () => {
                               {user.is_active ? 'Disable' : 'Enable'}
                             </button>
                           )}
-                          {isSuperAdmin && (
+                          {isSuperAdmin && user.role !== 'SuperAdmin' && (
                             <button
                               className="action-btn delete-btn"
                               onClick={() => handleDeleteUser(user.id)}

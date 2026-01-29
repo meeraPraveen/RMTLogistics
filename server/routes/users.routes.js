@@ -191,6 +191,17 @@ router.delete('/:id', requireSuperAdmin, async (req, res) => {
       });
     }
 
+    // Get user to check if they're a SuperAdmin
+    const { query } = await import('../config/database.js');
+    const userResult = await query('SELECT role FROM users WHERE id = $1', [userId]);
+    if (userResult.rows.length > 0 && userResult.rows[0].role === 'SuperAdmin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Cannot delete SuperAdmin users',
+        message: 'SuperAdmin users are protected and cannot be deleted'
+      });
+    }
+
     const deleted = await deleteUser(userId);
 
     if (!deleted) {
@@ -323,6 +334,17 @@ router.post('/:auth0UserId/suspend', requireSuperAdmin, async (req, res) => {
     const { auth0UserId } = req.params;
     console.log(`📥 Suspend request received for: ${auth0UserId}`);
 
+    // Get user to check if they're a SuperAdmin
+    const { query } = await import('../config/database.js');
+    const userResult = await query('SELECT role FROM users WHERE auth0_user_id = $1', [auth0UserId]);
+    if (userResult.rows.length > 0 && userResult.rows[0].role === 'SuperAdmin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Cannot suspend SuperAdmin users',
+        message: 'SuperAdmin users are protected and cannot be disabled'
+      });
+    }
+
     const user = await suspendUser(auth0UserId);
 
     res.json({
@@ -389,6 +411,17 @@ router.delete('/:auth0UserId', requireSuperAdmin, async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'Cannot delete yourself'
+      });
+    }
+
+    // Get user to check if they're a SuperAdmin
+    const { query } = await import('../config/database.js');
+    const userResult = await query('SELECT role FROM users WHERE auth0_user_id = $1', [auth0UserId]);
+    if (userResult.rows.length > 0 && userResult.rows[0].role === 'SuperAdmin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Cannot delete SuperAdmin users',
+        message: 'SuperAdmin users are protected and cannot be deleted'
       });
     }
 
