@@ -249,10 +249,20 @@ export const createUser = async (userData, createdBy) => {
 
     // Step 2: Sync to Auth0 for authentication
     try {
-      // Fetch permissions for the role
+      // Fetch permissions for the role from database
       const { getRolePermissions } = await import('./permissions.service.js');
-      const permissions = await getRolePermissions(dbUser.role);
-      console.log(`📋 Syncing permissions for new user with role ${dbUser.role}:`, JSON.stringify(permissions));
+      let permissions = await getRolePermissions(dbUser.role);
+      console.log(`📋 Creating user: Fetched permissions for role "${dbUser.role}" from DB:`, JSON.stringify(permissions));
+
+      // Fallback to rbac.config.js if no permissions in DB
+      if (!permissions || Object.keys(permissions).length === 0) {
+        console.warn(`⚠️  No permissions found in DB for role "${dbUser.role}" - using rbac.config.js fallback`);
+        const { getRolePermissions: getConfigPermissions } = await import('../config/rbac.config.js');
+        permissions = await getConfigPermissions(dbUser.role);
+        console.log(`📋 Fallback permissions from rbac.config.js:`, JSON.stringify(permissions));
+      }
+
+      console.log(`📤 Syncing to Auth0: email=${dbUser.email}, role=${dbUser.role}, permissions=${JSON.stringify(permissions)}`);
 
       const auth0Result = await createAuth0User({
         email: dbUser.email,

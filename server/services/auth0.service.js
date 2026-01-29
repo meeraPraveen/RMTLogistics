@@ -43,6 +43,13 @@ export const createAuth0User = async (userData) => {
   try {
     console.log(`📤 Creating user in Auth0: ${userData.email}`);
 
+    // First check if user already exists in Auth0 (any connection - Google, Facebook, etc.)
+    const existingAuth0User = await getAuth0UserByEmail(userData.email);
+    if (existingAuth0User) {
+      console.log(`⚠️  User ${userData.email} already exists in Auth0 (${existingAuth0User.user_id}), syncing instead of creating...`);
+      return await syncExistingAuth0User(userData);
+    }
+
     const auth0User = await auth0Management.users.create({
       email: userData.email,
       name: userData.name,
@@ -99,6 +106,7 @@ export const createAuth0User = async (userData) => {
 export const updateAuth0User = async (auth0UserId, updates) => {
   try {
     console.log(`📤 Updating user in Auth0: ${auth0UserId}`);
+    console.log(`   Updates received:`, JSON.stringify(updates));
 
     const updateData = {};
 
@@ -121,6 +129,7 @@ export const updateAuth0User = async (auth0UserId, updates) => {
         db_synced: true,
         synced_at: new Date().toISOString()
       };
+      console.log(`   app_metadata to sync:`, JSON.stringify(updateData.app_metadata));
     }
 
     // Block/unblock user if provided
@@ -128,12 +137,15 @@ export const updateAuth0User = async (auth0UserId, updates) => {
       updateData.blocked = updates.blocked;
     }
 
+    console.log(`   Full updateData being sent to Auth0:`, JSON.stringify(updateData));
+
     const auth0User = await auth0Management.users.update(
       auth0UserId,
       updateData
     );
 
     console.log(`✅ User updated in Auth0: ${auth0UserId}`);
+    console.log(`   Auth0 response app_metadata:`, JSON.stringify(auth0User.app_metadata));
 
     return {
       auth0_user_id: auth0User.user_id,
@@ -213,7 +225,12 @@ const syncExistingAuth0User = async (userData) => {
       throw new Error('User not found in Auth0');
     }
 
-    console.log(`🔄 Syncing existing Auth0 user: ${userData.email} (blocked: ${auth0User.blocked})`);
+    console.log(`🔄 Syncing existing Auth0 user: ${userData.email}`);
+    console.log(`   Auth0 User ID: ${auth0User.user_id}`);
+    console.log(`   Current blocked status: ${auth0User.blocked}`);
+    console.log(`   Current app_metadata: ${JSON.stringify(auth0User.app_metadata)}`);
+    console.log(`   New role to sync: ${userData.role}`);
+    console.log(`   New permissions to sync: ${JSON.stringify(userData.permissions)}`);
 
     // Update Auth0 user: unblock + sync role + permissions
     await updateAuth0User(auth0User.user_id, {
@@ -223,7 +240,7 @@ const syncExistingAuth0User = async (userData) => {
       blocked: false  // Unblock user if they were previously blocked
     });
 
-    console.log(`✅ User ${userData.email} unblocked and synced with role: ${userData.role}`);
+    console.log(`✅ User ${userData.email} synced to Auth0 with role: ${userData.role}`);
 
     return {
       auth0_user_id: auth0User.user_id,
@@ -234,6 +251,7 @@ const syncExistingAuth0User = async (userData) => {
     };
 
   } catch (error) {
+    console.error(`❌ Failed to sync existing Auth0 user ${userData.email}:`, error);
     throw new Error(`Failed to sync existing Auth0 user: ${error.message}`);
   }
 };

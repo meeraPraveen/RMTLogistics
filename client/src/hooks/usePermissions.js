@@ -7,6 +7,8 @@ export const usePermissions = () => {
   const [permissions, setPermissions] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [accessDenied, setAccessDenied] = useState(false);
+  const [accessDeniedMessage, setAccessDeniedMessage] = useState(null);
 
   useEffect(() => {
     const fetchPermissions = async () => {
@@ -39,9 +41,16 @@ export const usePermissions = () => {
         const response = await permissionsApi.getCurrentUser();
         setPermissions(response.data.data);
         setError(null);
+        setAccessDenied(false);
       } catch (err) {
         console.error('Failed to fetch permissions:', err);
         setError(err.message);
+
+        // Check for 403 Forbidden - user has no role assigned in Auth0
+        if (err.response?.status === 403) {
+          setAccessDenied(true);
+          setAccessDeniedMessage(err.response?.data?.message || 'Access denied. Your account has not been assigned a role.');
+        }
       } finally {
         setLoading(false);
       }
@@ -68,6 +77,8 @@ export const usePermissions = () => {
     permissions,
     loading,
     error,
+    accessDenied,
+    accessDeniedMessage,
     hasModuleAccess,
     hasPermission,
     isSuperAdmin

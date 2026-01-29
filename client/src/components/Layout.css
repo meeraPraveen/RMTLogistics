@@ -132,3 +132,58 @@
     margin-left: 0;
   }
 }
+
+/* Access Denied Screen */
+.access-denied-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 100vh;
+  background: #f9fafb;
+}
+
+.access-denied-content {
+  text-align: center;
+  padding: 3rem;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  max-width: 480px;
+}
+
+.access-denied-content h1 {
+  color: var(--danger-color);
+  font-size: 2rem;
+  margin-bottom: 1rem;
+}
+
+.access-denied-message {
+  color: var(--text-primary);
+  font-size: 1.125rem;
+  margin-bottom: 0.5rem;
+}
+
+.access-denied-details {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin-bottom: 1.5rem;
+}
+
+.access-denied-user {
+  padding: 1rem;
+  background: #f3f4f6;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+}
+
+.access-denied-user p {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.access-denied-logout {
+  max-width: 200px;
+  margin: 0 auto;
+}

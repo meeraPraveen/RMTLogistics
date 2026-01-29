@@ -115,34 +115,22 @@ export const extractUserInfo = async (req, res, next) => {
         }
       }
 
-      // If no role in token but user exists in DB with a role, use DB role and sync to Auth0
-      if (!tokenRole && dbUser?.role) {
-        console.log(`🔄 No role in token but found in DB for ${email} - Using DB role: ${dbUser.role}`);
-        effectiveRole = dbUser.role;
-
-        // Fetch permissions for this role from DB
-        const { getRolePermissions } = await import('../config/rbac.config.js');
-        effectivePermissions = await getRolePermissions(dbUser.role);
-
-        // Sync role and permissions to Auth0 (non-blocking)
-        const { updateAuth0User } = await import('../services/auth0.service.js');
-        updateAuth0User(auth0UserId, {
-          role: dbUser.role,
-          permissions: effectivePermissions
-        }).then(() => {
-          console.log(`✅ Synced role ${dbUser.role} to Auth0 for ${email} - User should re-login for updated token`);
-        }).catch(err => {
-          console.error(`⚠️  Failed to sync role to Auth0 for ${email}:`, err.message);
+      // STRICT AUTH0 ENFORCEMENT: If no role in token, deny access
+      // Auth0 app_metadata must have role assigned - no DB fallback
+      if (!tokenRole) {
+        console.warn(`⚠️  No role in Auth0 app_metadata for ${email} - Access denied`);
+        console.warn(`⚠️  User must have role assigned in Auth0 to access the application`);
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: 'Access denied. Your account has not been assigned a role. Please contact your administrator.',
+          details: 'Auth0 app_metadata must contain a valid role to access this application.'
         });
       }
 
-      // If still no role, deny access
-      if (!effectiveRole) {
-        console.warn(`⚠️  No role found for ${email} - Access denied`);
-        return res.status(403).json({
-          error: 'Forbidden',
-          message: 'User role not found. Please contact your administrator to be assigned a role.'
-        });
+      // Check if permissions exist in token
+      if (!tokenPermissions || Object.keys(tokenPermissions).length === 0) {
+        console.warn(`⚠️  No permissions in Auth0 app_metadata for ${email} (role: ${tokenRole})`);
+        // Allow access but log warning - permissions might be empty for some roles
       }
 
       // Update last login timestamp (non-blocking, doesn't affect authorization)
