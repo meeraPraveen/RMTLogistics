@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { companiesApi, setAuthToken } from '../utils/api';
 import { useAuth0 } from '@auth0/auth0-react';
 import CompanyModal from '../components/CompanyModal';
+import CompanyUsersSection from '../components/CompanyUsersSection';
 
 const CompaniesTab = () => {
   const { getIdTokenClaims } = useAuth0();
@@ -13,6 +14,9 @@ const CompaniesTab = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState('add');
   const [selectedCompany, setSelectedCompany] = useState(null);
+
+  // Expanded company (for showing users)
+  const [expandedCompanyId, setExpandedCompanyId] = useState(null);
 
   // Pagination
   const [pagination, setPagination] = useState({
@@ -238,55 +242,74 @@ const CompaniesTab = () => {
               </tr>
             ) : (
               companies.map(company => (
-                <tr key={company.id}>
-                  <td><strong>{company.name}</strong></td>
-                  <td>
-                    {company.org_id ? (
-                      <code style={{ fontSize: '0.85em', background: '#f0f0f0', padding: '2px 6px', borderRadius: '4px' }}>
-                        {company.org_id}
-                      </code>
-                    ) : (
-                      <em style={{ color: '#999' }}>Not synced</em>
-                    )}
-                  </td>
-                  <td style={{ maxWidth: '200px' }}>
-                    <span style={{ fontSize: '0.9em' }}>
-                      {formatModules(company.enabled_modules)}
-                    </span>
-                  </td>
-                  <td>
-                    <span
-                      className="status-badge"
-                      style={{ backgroundColor: company.is_active ? '#10b981' : '#ef4444' }}
-                    >
-                      {company.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td>{formatDate(company.created_at)}</td>
-                  <td className="actions-cell">
-                    <button
-                      className="action-btn edit-btn"
-                      onClick={() => handleEditCompany(company)}
-                      title="Edit Company"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      className={`action-btn ${company.is_active ? 'disable-btn' : 'enable-btn'}`}
-                      onClick={() => handleToggleStatus(company)}
-                      title={company.is_active ? 'Disable Company' : 'Enable Company'}
-                    >
-                      {company.is_active ? 'Disable' : 'Enable'}
-                    </button>
-                    <button
-                      className="action-btn delete-btn"
-                      onClick={() => handleDeleteCompany(company.id)}
-                      title="Delete Company"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
+                <React.Fragment key={company.id}>
+                  <tr className={expandedCompanyId === company.id ? 'expanded' : ''}>
+                    <td><strong>{company.name}</strong></td>
+                    <td>
+                      {company.org_id ? (
+                        <code style={{ fontSize: '0.85em', background: '#f0f0f0', padding: '2px 6px', borderRadius: '4px' }}>
+                          {company.org_id}
+                        </code>
+                      ) : (
+                        <em style={{ color: '#999' }}>Not synced</em>
+                      )}
+                    </td>
+                    <td style={{ maxWidth: '200px' }}>
+                      <span style={{ fontSize: '0.9em' }}>
+                        {formatModules(company.enabled_modules)}
+                      </span>
+                    </td>
+                    <td>
+                      <span
+                        className="status-badge"
+                        style={{ backgroundColor: company.is_active ? '#10b981' : '#ef4444' }}
+                      >
+                        {company.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td>{formatDate(company.created_at)}</td>
+                    <td className="actions-cell">
+                      <button
+                        className={`action-btn users-btn ${expandedCompanyId === company.id ? 'active' : ''}`}
+                        onClick={() => setExpandedCompanyId(expandedCompanyId === company.id ? null : company.id)}
+                        title="Manage Users"
+                      >
+                        Users
+                      </button>
+                      <button
+                        className="action-btn edit-btn"
+                        onClick={() => handleEditCompany(company)}
+                        title="Edit Company"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className={`action-btn ${company.is_active ? 'disable-btn' : 'enable-btn'}`}
+                        onClick={() => handleToggleStatus(company)}
+                        title={company.is_active ? 'Disable Company' : 'Enable Company'}
+                      >
+                        {company.is_active ? 'Disable' : 'Enable'}
+                      </button>
+                      <button
+                        className="action-btn delete-btn"
+                        onClick={() => handleDeleteCompany(company.id)}
+                        title="Delete Company"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                  {expandedCompanyId === company.id && (
+                    <tr className="expanded-row">
+                      <td colSpan="6">
+                        <CompanyUsersSection
+                          company={company}
+                          onClose={() => setExpandedCompanyId(null)}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))
             )}
           </tbody>

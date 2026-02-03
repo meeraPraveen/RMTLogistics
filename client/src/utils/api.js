@@ -79,7 +79,14 @@ export const companiesApi = {
   create: (companyData) => api.post('/companies', companyData),
   update: (id, companyData) => api.put(`/companies/${id}`, companyData),
   delete: (id) => api.delete(`/companies/${id}`),
-  toggleStatus: (id) => api.post(`/companies/${id}/toggle-status`)
+  toggleStatus: (id) => api.post(`/companies/${id}/toggle-status`),
+
+  // Company Users (B2B)
+  getUsers: (companyId, params) => api.get(`/companies/${companyId}/users`, { params }),
+  createUser: (companyId, userData) => api.post(`/companies/${companyId}/users`, userData),
+  updateUser: (companyId, userId, userData) => api.put(`/companies/${companyId}/users/${userId}`, userData),
+  deleteUser: (companyId, userId) => api.delete(`/companies/${companyId}/users/${userId}`),
+  toggleUserStatus: (companyId, userId) => api.post(`/companies/${companyId}/users/${userId}/toggle-status`)
 };
 
 // Modules API

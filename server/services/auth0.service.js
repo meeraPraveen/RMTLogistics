@@ -28,7 +28,7 @@ const auth0Management = new ManagementClient({
   domain: process.env.AUTH0_MGMT_DOMAIN,
   clientId: process.env.AUTH0_MGMT_CLIENT_ID,
   clientSecret: process.env.AUTH0_MGMT_CLIENT_SECRET,
-  scope: 'read:users update:users delete:users create:users update:users_app_metadata create:user_tickets read:organizations create:organizations update:organizations delete:organizations'
+  scope: 'read:users update:users delete:users create:users update:users_app_metadata create:user_tickets read:organizations create:organizations update:organizations delete:organizations read:organization_members create:organization_members delete:organization_members'
 });
 
 /**
@@ -63,13 +63,16 @@ export const createAuth0User = async (userData) => {
       app_metadata: {
         role: userData.role,
         permissions: userData.permissions || {},
+        // B2B company info (if provided)
+        ...(userData.company_id && { company_id: userData.company_id }),
+        ...(userData.org_id && { org_id: userData.org_id }),
         db_synced: true,
         synced_at: new Date().toISOString()
       },
 
       // User metadata (editable by user)
       user_metadata: {
-        created_via: 'admin_portal'
+        created_via: userData.company_id ? 'company_admin_portal' : 'admin_portal'
       }
     });
 
@@ -121,11 +124,13 @@ export const updateAuth0User = async (auth0UserId, updates) => {
       updateData.name = updates.name;
     }
 
-    // Update role and permissions in app_metadata if provided
-    if (updates.role || updates.permissions) {
+    // Update role, permissions, and company info in app_metadata if provided
+    if (updates.role || updates.permissions || updates.company_id || updates.org_id) {
       updateData.app_metadata = {
         ...(updates.role && { role: updates.role }),
         ...(updates.permissions && { permissions: updates.permissions }),
+        ...(updates.company_id && { company_id: updates.company_id }),
+        ...(updates.org_id && { org_id: updates.org_id }),
         db_synced: true,
         synced_at: new Date().toISOString()
       };
@@ -232,11 +237,13 @@ const syncExistingAuth0User = async (userData) => {
     console.log(`   New role to sync: ${userData.role}`);
     console.log(`   New permissions to sync: ${JSON.stringify(userData.permissions)}`);
 
-    // Update Auth0 user: unblock + sync role + permissions
+    // Update Auth0 user: unblock + sync role + permissions + company info
     await updateAuth0User(auth0User.user_id, {
       name: userData.name,
       role: userData.role,
       permissions: userData.permissions || {},
+      company_id: userData.company_id,
+      org_id: userData.org_id,
       blocked: false  // Unblock user if they were previously blocked
     });
 
@@ -470,6 +477,116 @@ export const getAuth0Organization = async (orgId) => {
   }
 };
 
+/**
+ * Get Auth0 Management API access token for direct REST calls
+ * @returns {Promise<string>} Access token
+ */
+const getAuth0ManagementToken = async () => {
+  const response = await fetch(`https://${process.env.AUTH0_MGMT_DOMAIN}/oauth/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      client_id: process.env.AUTH0_MGMT_CLIENT_ID,
+      client_secret: process.env.AUTH0_MGMT_CLIENT_SECRET,
+      audience: `https://${process.env.AUTH0_MGMT_DOMAIN}/api/v2/`,
+      grant_type: 'client_credentials'
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to get Auth0 token: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return data.access_token;
+};
+
+/**
+ * Add a user to an Auth0 Organization as a member
+ * Uses direct REST API call due to SDK v5 bugs with organization members
+ * @param {string} orgId - Auth0 Organization ID (e.g., "org_xxxxx")
+ * @param {string} auth0UserId - Auth0 User ID (e.g., "auth0|xxxxx")
+ * @returns {Promise<Object>}
+ */
+export const addUserToAuth0Organization = async (orgId, auth0UserId) => {
+  try {
+    // Ensure orgId is a string
+    const orgIdString = typeof orgId === 'object' && orgId !== null ? orgId.org_id || orgId.id : orgId;
+    console.log(`📤 Adding user ${auth0UserId} to Auth0 Organization: ${orgIdString}`);
+
+    // Get fresh access token
+    const token = await getAuth0ManagementToken();
+
+    // Direct REST API call to add member
+    const response = await fetch(
+      `https://${process.env.AUTH0_MGMT_DOMAIN}/api/v2/organizations/${orgIdString}/members`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ members: [auth0UserId] })
+      }
+    );
+
+    if (!response.ok) {
+      const errorBody = await response.json();
+      console.error(`❌ Auth0 API error:`, errorBody);
+      throw new Error(errorBody.message || `HTTP ${response.status}`);
+    }
+
+    console.log(`✅ User ${auth0UserId} added to Organization ${orgIdString}`);
+    return { success: true, orgId: orgIdString, auth0UserId };
+  } catch (error) {
+    console.error(`❌ Error adding user to Auth0 Organization:`, error);
+    throw new Error(`Failed to add user to Auth0 Organization: ${error.message}`);
+  }
+};
+
+/**
+ * Remove a user from an Auth0 Organization
+ * Uses direct REST API call due to SDK v5 bugs
+ * @param {string} orgId - Auth0 Organization ID
+ * @param {string} auth0UserId - Auth0 User ID
+ * @returns {Promise<Object>}
+ */
+export const removeUserFromAuth0Organization = async (orgId, auth0UserId) => {
+  try {
+    // Ensure orgId is a string
+    const orgIdString = typeof orgId === 'object' && orgId !== null ? orgId.org_id || orgId.id : orgId;
+    console.log(`📤 Removing user ${auth0UserId} from Auth0 Organization: ${orgIdString}`);
+
+    // Get fresh access token
+    const token = await getAuth0ManagementToken();
+
+    // Direct REST API call to remove member
+    const response = await fetch(
+      `https://${process.env.AUTH0_MGMT_DOMAIN}/api/v2/organizations/${orgIdString}/members`,
+      {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ members: [auth0UserId] })
+      }
+    );
+
+    if (!response.ok) {
+      const errorBody = await response.json();
+      console.error(`❌ Auth0 API error:`, errorBody);
+      throw new Error(errorBody.message || `HTTP ${response.status}`);
+    }
+
+    console.log(`✅ User ${auth0UserId} removed from Organization ${orgIdString}`);
+    return { success: true, orgId: orgIdString, auth0UserId };
+  } catch (error) {
+    console.error(`❌ Error removing user from Auth0 Organization:`, error);
+    throw new Error(`Failed to remove user from Auth0 Organization: ${error.message}`);
+  }
+};
+
 export default {
   createAuth0User,
   updateAuth0User,
@@ -480,5 +597,7 @@ export default {
   createAuth0Organization,
   updateAuth0Organization,
   deleteAuth0Organization,
-  getAuth0Organization
+  getAuth0Organization,
+  addUserToAuth0Organization,
+  removeUserFromAuth0Organization
 };
