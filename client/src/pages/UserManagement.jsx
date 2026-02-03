@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { usersApi, permissionsApi, setAuthToken } from '../utils/api';
 import { useAuth0 } from '@auth0/auth0-react';
 import RolePermissions from './RolePermissions';
+import CompaniesTab from './CompaniesTab';
 import UserModal from '../components/UserModal';
 import './UserManagement.css';
 
@@ -235,6 +236,14 @@ const UserManagement = () => {
         >
           Role Permissions
         </button>
+        {isSuperAdmin && (
+          <button
+            className={`tab ${activeTab === 'companies' ? 'active' : ''}`}
+            onClick={() => setActiveTab('companies')}
+          >
+            Companies
+          </button>
+        )}
       </div>
 
       {activeTab === 'users' ? (
@@ -402,9 +411,11 @@ const UserManagement = () => {
             </div>
           )}
         </>
-      ) : (
+      ) : activeTab === 'roles' ? (
         <RolePermissions />
-      )}
+      ) : activeTab === 'companies' && isSuperAdmin ? (
+        <CompaniesTab />
+      ) : null}
 
       <UserModal
         isOpen={isModalOpen}

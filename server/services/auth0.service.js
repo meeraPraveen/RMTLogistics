@@ -28,7 +28,7 @@ const auth0Management = new ManagementClient({
   domain: process.env.AUTH0_MGMT_DOMAIN,
   clientId: process.env.AUTH0_MGMT_CLIENT_ID,
   clientSecret: process.env.AUTH0_MGMT_CLIENT_SECRET,
-  scope: 'read:users update:users delete:users create:users update:users_app_metadata create:user_tickets'
+  scope: 'read:users update:users delete:users create:users update:users_app_metadata create:user_tickets read:organizations create:organizations update:organizations delete:organizations'
 });
 
 /**
@@ -354,11 +354,131 @@ export const bulkSyncUsers = async (users) => {
   return results;
 };
 
+// ==========================================
+// Auth0 Organization Functions
+// ==========================================
+
+/**
+ * Create an Auth0 Organization
+ * @param {Object} orgData - Organization data
+ * @param {string} orgData.name - Unique organization identifier (slug)
+ * @param {string} orgData.display_name - Display name
+ * @param {Object} orgData.metadata - Custom metadata
+ * @returns {Promise<Object>} - Created Auth0 organization
+ */
+export const createAuth0Organization = async (orgData) => {
+  try {
+    console.log(`📤 Creating Auth0 Organization: ${orgData.name}`);
+
+    const org = await auth0Management.organizations.create({
+      name: orgData.name.toLowerCase().replace(/[^a-z0-9-]/g, '-'), // Slug format
+      display_name: orgData.display_name,
+      metadata: orgData.metadata || {},
+      branding: orgData.branding || {}
+    });
+
+    console.log(`✅ Auth0 Organization created: ${org.id}`);
+
+    return {
+      org_id: org.id,
+      name: org.name,
+      display_name: org.display_name,
+      created: true
+    };
+
+  } catch (error) {
+    console.error(`❌ Error creating Auth0 Organization:`, error);
+
+    if (error.statusCode === 409) {
+      console.log(`⚠️  Organization ${orgData.name} already exists`);
+      throw new Error('Organization with this name already exists');
+    }
+
+    throw new Error(`Failed to create Auth0 Organization: ${error.message}`);
+  }
+};
+
+/**
+ * Update an Auth0 Organization
+ * @param {string} orgId - Auth0 Organization ID
+ * @param {Object} updates - Fields to update
+ * @returns {Promise<Object>} - Updated organization
+ */
+export const updateAuth0Organization = async (orgId, updates) => {
+  try {
+    console.log(`📤 Updating Auth0 Organization: ${orgId}`);
+
+    const updateData = {};
+    if (updates.display_name) updateData.display_name = updates.display_name;
+    if (updates.metadata) updateData.metadata = updates.metadata;
+    if (updates.branding) updateData.branding = updates.branding;
+
+    const org = await auth0Management.organizations.update({ id: orgId }, updateData);
+
+    console.log(`✅ Auth0 Organization updated: ${orgId}`);
+
+    return {
+      org_id: org.id,
+      updated: true
+    };
+
+  } catch (error) {
+    console.error(`❌ Error updating Auth0 Organization:`, error);
+    throw new Error(`Failed to update Auth0 Organization: ${error.message}`);
+  }
+};
+
+/**
+ * Delete an Auth0 Organization
+ * @param {string} orgId - Auth0 Organization ID
+ * @returns {Promise<Object>}
+ */
+export const deleteAuth0Organization = async (orgId) => {
+  try {
+    console.log(`📤 Deleting Auth0 Organization: ${orgId}`);
+
+    await auth0Management.organizations.delete({ id: orgId });
+
+    console.log(`✅ Auth0 Organization deleted: ${orgId}`);
+
+    return { org_id: orgId, deleted: true };
+
+  } catch (error) {
+    console.error(`❌ Error deleting Auth0 Organization:`, error);
+
+    if (error.statusCode === 404) {
+      console.warn(`⚠️  Organization ${orgId} not found in Auth0`);
+      return { org_id: orgId, deleted: false, error: 'Organization not found' };
+    }
+
+    throw new Error(`Failed to delete Auth0 Organization: ${error.message}`);
+  }
+};
+
+/**
+ * Get an Auth0 Organization by ID
+ * @param {string} orgId - Auth0 Organization ID
+ * @returns {Promise<Object|null>}
+ */
+export const getAuth0Organization = async (orgId) => {
+  try {
+    const org = await auth0Management.organizations.getByID({ id: orgId });
+    return org;
+  } catch (error) {
+    console.error(`❌ Error fetching Auth0 Organization:`, error);
+    return null;
+  }
+};
+
 export default {
   createAuth0User,
   updateAuth0User,
   deleteAuth0User,
   getAuth0UserByEmail,
   verifyAuth0Connection,
-  bulkSyncUsers
+  bulkSyncUsers,
+  createAuth0Organization,
+  updateAuth0Organization,
+  deleteAuth0Organization,
+  getAuth0Organization
 };

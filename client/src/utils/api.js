@@ -78,7 +78,8 @@ export const companiesApi = {
   getById: (id) => api.get(`/companies/${id}`),
   create: (companyData) => api.post('/companies', companyData),
   update: (id, companyData) => api.put(`/companies/${id}`, companyData),
-  delete: (id) => api.delete(`/companies/${id}`)
+  delete: (id) => api.delete(`/companies/${id}`),
+  toggleStatus: (id) => api.post(`/companies/${id}/toggle-status`)
 };
 
 // Modules API

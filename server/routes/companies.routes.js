@@ -4,9 +4,10 @@ import {
   getAllCompanies,
   getCompanyById,
   updateCompany,
-  deleteCompany
+  deleteCompany,
+  toggleCompanyStatus
 } from '../services/company.service.js';
-import { requireRole } from '../middleware/rbac.middleware.js';
+import { requireRole, requireSuperAdmin } from '../middleware/rbac.middleware.js';
 
 const router = express.Router();
 
@@ -17,12 +18,7 @@ const router = express.Router();
  */
 router.get('/', requireRole(['Admin', 'SuperAdmin']), async (req, res) => {
   try {
-    const {
-      page = 1,
-      limit = 25,
-      search,
-      is_active
-    } = req.query;
+    const { page = 1, limit = 25, search, is_active } = req.query;
 
     const options = {
       page: parseInt(page),
@@ -50,12 +46,12 @@ router.get('/', requireRole(['Admin', 'SuperAdmin']), async (req, res) => {
 
 /**
  * @route   GET /api/companies/:id
- * @desc    Get company by ID
+ * @desc    Get company by ID (UUID)
  * @access  Private (Admin, SuperAdmin)
  */
 router.get('/:id', requireRole(['Admin', 'SuperAdmin']), async (req, res) => {
   try {
-    const companyId = parseInt(req.params.id);
+    const companyId = req.params.id; // UUID
     const company = await getCompanyById(companyId);
 
     if (!company) {
@@ -81,25 +77,24 @@ router.get('/:id', requireRole(['Admin', 'SuperAdmin']), async (req, res) => {
 
 /**
  * @route   POST /api/companies
- * @desc    Create a new company
- * @access  Private (Admin, SuperAdmin)
+ * @desc    Create a new company (also creates Auth0 Organization)
+ * @access  Private (SuperAdmin only)
  */
-router.post('/', requireRole(['Admin', 'SuperAdmin']), async (req, res) => {
+router.post('/', requireSuperAdmin, async (req, res) => {
   try {
-    const companyData = {
-      ...req.body,
-      // Parse JSON strings from form data
-      address: typeof req.body.address === 'string'
-        ? JSON.parse(req.body.address)
-        : req.body.address,
-      // Parse numeric values
-      discount_rate: req.body.discount_rate ? parseFloat(req.body.discount_rate) : null,
-    };
+    const { name, enabled_modules } = req.body;
 
-    // Get user ID from auth
-    const createdBy = req.user.id;
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        error: 'Company name is required'
+      });
+    }
 
-    const newCompany = await createCompany(companyData, createdBy);
+    const newCompany = await createCompany({
+      name,
+      enabled_modules: enabled_modules || ['order_management']
+    });
 
     res.status(201).json({
       success: true,
@@ -119,30 +114,18 @@ router.post('/', requireRole(['Admin', 'SuperAdmin']), async (req, res) => {
 /**
  * @route   PUT /api/companies/:id
  * @desc    Update a company
- * @access  Private (Admin, SuperAdmin)
+ * @access  Private (SuperAdmin only)
  */
-router.put('/:id', requireRole(['Admin', 'SuperAdmin']), async (req, res) => {
+router.put('/:id', requireSuperAdmin, async (req, res) => {
   try {
-    const companyId = parseInt(req.params.id);
+    const companyId = req.params.id; // UUID
+    const { name, enabled_modules, is_active } = req.body;
 
-    const updates = {
-      ...req.body,
-      // Parse JSON strings from form data
-      address: typeof req.body.address === 'string'
-        ? JSON.parse(req.body.address)
-        : req.body.address,
-      // Parse numeric values
-      discount_rate: req.body.discount_rate ? parseFloat(req.body.discount_rate) : undefined,
-    };
-
-    const updatedCompany = await updateCompany(companyId, updates);
-
-    if (!updatedCompany) {
-      return res.status(404).json({
-        success: false,
-        error: 'Company not found'
-      });
-    }
+    const updatedCompany = await updateCompany(companyId, {
+      name,
+      enabled_modules,
+      is_active
+    });
 
     res.json({
       success: true,
@@ -151,6 +134,14 @@ router.put('/:id', requireRole(['Admin', 'SuperAdmin']), async (req, res) => {
     });
   } catch (error) {
     console.error('Error updating company:', error);
+
+    if (error.message === 'Company not found') {
+      return res.status(404).json({
+        success: false,
+        error: 'Company not found'
+      });
+    }
+
     res.status(500).json({
       success: false,
       error: 'Failed to update company',
@@ -160,21 +151,47 @@ router.put('/:id', requireRole(['Admin', 'SuperAdmin']), async (req, res) => {
 });
 
 /**
- * @route   DELETE /api/companies/:id
- * @desc    Delete a company
+ * @route   POST /api/companies/:id/toggle-status
+ * @desc    Toggle company active status
  * @access  Private (SuperAdmin only)
  */
-router.delete('/:id', requireRole(['SuperAdmin']), async (req, res) => {
+router.post('/:id/toggle-status', requireSuperAdmin, async (req, res) => {
   try {
-    const companyId = parseInt(req.params.id);
-    const deleted = await deleteCompany(companyId);
+    const companyId = req.params.id; // UUID
+    const company = await toggleCompanyStatus(companyId);
 
-    if (!deleted) {
+    res.json({
+      success: true,
+      data: company,
+      message: `Company ${company.is_active ? 'enabled' : 'disabled'} successfully`
+    });
+  } catch (error) {
+    console.error('Error toggling company status:', error);
+
+    if (error.message === 'Company not found') {
       return res.status(404).json({
         success: false,
         error: 'Company not found'
       });
     }
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to toggle company status',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * @route   DELETE /api/companies/:id
+ * @desc    Delete a company (also deletes Auth0 Organization)
+ * @access  Private (SuperAdmin only)
+ */
+router.delete('/:id', requireSuperAdmin, async (req, res) => {
+  try {
+    const companyId = req.params.id; // UUID
+    await deleteCompany(companyId);
 
     res.json({
       success: true,
@@ -182,6 +199,14 @@ router.delete('/:id', requireRole(['SuperAdmin']), async (req, res) => {
     });
   } catch (error) {
     console.error('Error deleting company:', error);
+
+    if (error.message === 'Company not found') {
+      return res.status(404).json({
+        success: false,
+        error: 'Company not found'
+      });
+    }
+
     res.status(500).json({
       success: false,
       error: 'Failed to delete company',
