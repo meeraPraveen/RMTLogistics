@@ -407,11 +407,12 @@ router.delete('/:id/users/:userId', requireSuperAdmin, async (req, res) => {
   try {
     const { id: companyId, userId } = req.params;
 
-    await deleteCompanyUser(companyId, parseInt(userId));
+    const user = await deleteCompanyUser(companyId, parseInt(userId));
 
     res.json({
       success: true,
-      message: 'User removed from company successfully'
+      message: `User ${user.email} removed from company and deactivated`,
+      data: user
     });
   } catch (error) {
     console.error('Error deleting company user:', error);

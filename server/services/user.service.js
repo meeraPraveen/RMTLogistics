@@ -1,5 +1,5 @@
 import { query } from '../config/database.js';
-import { createAuth0User, updateAuth0User, deleteAuth0User } from './auth0.service.js';
+import { createAuth0User, updateAuth0User, deleteAuth0User, addUserToAuth0Organization, removeUserFromAuth0Organization } from './auth0.service.js';
 import { withRetry, isRetryableAuth0Error } from '../utils/retry.js';
 import { queueFailedSync } from './failedSync.service.js';
 
@@ -193,18 +193,20 @@ export const getAllUsers = async (options = {}) => {
 
     // Get total count
     const countResult = await query(
-      `SELECT COUNT(*) FROM users ${whereClause}`,
+      `SELECT COUNT(*) FROM users u ${whereClause.replace(/(?<![uc]\.)(\b(email|name|role|is_active)\b)/g, 'u.$1')}`,
       params
     );
     const total = parseInt(countResult.rows[0].count);
 
-    // Get paginated users
+    // Get paginated users with company info
     params.push(limit, offset);
     const result = await query(
-      `SELECT id, auth0_user_id, email, name, role, is_active, created_at, updated_at, last_login
-       FROM users
-       ${whereClause}
-       ORDER BY created_at DESC
+      `SELECT u.id, u.auth0_user_id, u.email, u.name, u.role, u.is_active, u.created_at, u.updated_at, u.last_login,
+              u.company_id, c.name as company_name
+       FROM users u
+       LEFT JOIN companies c ON u.company_id = c.id
+       ${whereClause.replace(/(?<![uc]\.)(\b(email|name|role|is_active)\b)/g, 'u.$1')}
+       ORDER BY u.created_at DESC
        LIMIT $${paramIndex++} OFFSET $${paramIndex}`,
       params
     );
@@ -304,10 +306,21 @@ export const createUser = async (userData, createdBy) => {
  */
 export const updateUser = async (userId, userData) => {
   try {
-    const { name, role, is_active } = userData;
+    const { name, role, is_active, company_id } = userData;
     const updates = [];
     const params = [];
     let paramIndex = 1;
+
+    // Get current user data to detect company changes
+    const currentUserResult = await query(
+      'SELECT company_id, auth0_user_id, email FROM users WHERE id = $1',
+      [userId]
+    );
+    if (currentUserResult.rows.length === 0) {
+      throw new Error(`User with ID ${userId} not found`);
+    }
+    const currentUser = currentUserResult.rows[0];
+    const oldCompanyId = currentUser.company_id;
 
     if (name !== undefined) {
       updates.push(`name = $${paramIndex++}`);
@@ -322,6 +335,12 @@ export const updateUser = async (userId, userData) => {
     if (is_active !== undefined) {
       updates.push(`is_active = $${paramIndex++}`);
       params.push(is_active);
+    }
+
+    // Handle company_id - allow setting to null (empty string means null)
+    if (company_id !== undefined) {
+      updates.push(`company_id = $${paramIndex++}`);
+      params.push(company_id === '' ? null : company_id);
     }
 
     if (updates.length === 0) {
@@ -339,10 +358,6 @@ export const updateUser = async (userId, userData) => {
        RETURNING *`,
       params
     );
-
-    if (result.rows.length === 0) {
-      throw new Error(`User with ID ${userId} not found`);
-    }
 
     const dbUser = result.rows[0];
 
@@ -362,11 +377,67 @@ export const updateUser = async (userId, userData) => {
         }
         if (is_active !== undefined) auth0Updates.blocked = !is_active;
 
+        // Update company info in Auth0 app_metadata
+        if (company_id !== undefined) {
+          const newCompanyId = company_id === '' ? null : company_id;
+          auth0Updates.company_id = newCompanyId;
+
+          // Get the new company's org_id if assigning to a company
+          if (newCompanyId) {
+            const companyResult = await query(
+              'SELECT org_id FROM companies WHERE id = $1',
+              [newCompanyId]
+            );
+            if (companyResult.rows.length > 0) {
+              auth0Updates.org_id = companyResult.rows[0].org_id;
+            }
+          } else {
+            auth0Updates.org_id = null;
+          }
+        }
+
         await updateAuth0User(dbUser.auth0_user_id, auth0Updates);
         console.log(`✅ User ${dbUser.email} updated and synced to Auth0 (role + permissions)`);
       } catch (auth0Error) {
         console.error(`⚠️  User updated in DB but Auth0 sync failed for ${dbUser.email}:`, auth0Error.message);
         // Continue - DB is source of truth
+      }
+
+      // Step 3: Handle Auth0 Organization membership changes
+      if (company_id !== undefined) {
+        const newCompanyId = company_id === '' ? null : company_id;
+
+        // Remove from old organization if was in one
+        if (oldCompanyId && oldCompanyId !== newCompanyId) {
+          try {
+            const oldCompanyResult = await query(
+              'SELECT org_id FROM companies WHERE id = $1',
+              [oldCompanyId]
+            );
+            if (oldCompanyResult.rows.length > 0 && oldCompanyResult.rows[0].org_id) {
+              await removeUserFromAuth0Organization(oldCompanyResult.rows[0].org_id, dbUser.auth0_user_id);
+              console.log(`✅ User ${dbUser.email} removed from old Auth0 Organization`);
+            }
+          } catch (orgError) {
+            console.error(`⚠️  Failed to remove user from old Organization:`, orgError.message);
+          }
+        }
+
+        // Add to new organization if assigned to one
+        if (newCompanyId && newCompanyId !== oldCompanyId) {
+          try {
+            const newCompanyResult = await query(
+              'SELECT org_id FROM companies WHERE id = $1',
+              [newCompanyId]
+            );
+            if (newCompanyResult.rows.length > 0 && newCompanyResult.rows[0].org_id) {
+              await addUserToAuth0Organization(newCompanyResult.rows[0].org_id, dbUser.auth0_user_id);
+              console.log(`✅ User ${dbUser.email} added to new Auth0 Organization`);
+            }
+          } catch (orgError) {
+            console.error(`⚠️  Failed to add user to new Organization:`, orgError.message);
+          }
+        }
       }
     }
 

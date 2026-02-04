@@ -1,5 +1,5 @@
 import { query } from '../config/database.js';
-import { createAuth0User, updateAuth0User, deleteAuth0User, addUserToAuth0Organization, removeUserFromAuth0Organization } from './auth0.service.js';
+import { createAuth0User, updateAuth0User, addUserToAuth0Organization, removeUserFromAuth0Organization } from './auth0.service.js';
 import { getRolePermissions } from './permissions.service.js';
 
 /**
@@ -255,10 +255,12 @@ export const updateCompanyUser = async (companyId, userId, userData) => {
 };
 
 /**
- * Delete/remove a user from a company
+ * Remove a user from a company (soft removal)
+ * Sets user as inactive, clears company_id, removes from Auth0 Organization
+ * User is retained in the database for audit/history purposes
  * @param {string} companyId - Company UUID
  * @param {number} userId - User ID
- * @returns {Promise<boolean>} - True if deleted
+ * @returns {Promise<Object>} - Updated user
  */
 export const deleteCompanyUser = async (companyId, userId) => {
   try {
@@ -277,36 +279,46 @@ export const deleteCompanyUser = async (companyId, userId) => {
 
     const user = userCheck.rows[0];
 
-    // Delete from PostgreSQL
+    // Deactivate user and remove company association
     const result = await query(
-      'DELETE FROM users WHERE id = $1 AND company_id = $2',
-      [userId, companyId]
+      `UPDATE users
+       SET is_active = false, company_id = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1
+       RETURNING *`,
+      [userId]
     );
 
-    // Remove from Auth0 Organization and block user
-    if (user.auth0_user_id && !user.auth0_user_id.startsWith('pending_')) {
-      try {
-        // Remove from Organization first
-        if (user.org_id) {
-          try {
-            await removeUserFromAuth0Organization(user.org_id, user.auth0_user_id);
-            console.log(`✅ User ${user.email} removed from Auth0 Organization`);
-          } catch (orgError) {
-            console.error(`⚠️  Failed to remove user from Organization:`, orgError.message);
-          }
-        }
+    const dbUser = result.rows[0];
+    console.log(`✅ Company user ${user.email} deactivated and removed from company`);
 
-        // Then block the user in Auth0
-        await deleteAuth0User(user.auth0_user_id);
-        console.log(`✅ Company user ${user.email} deleted from DB and blocked in Auth0`);
+    // Sync changes to Auth0
+    if (user.auth0_user_id && !user.auth0_user_id.startsWith('pending_')) {
+      // Remove from Auth0 Organization
+      if (user.org_id) {
+        try {
+          await removeUserFromAuth0Organization(user.org_id, user.auth0_user_id);
+          console.log(`✅ User ${user.email} removed from Auth0 Organization`);
+        } catch (orgError) {
+          console.error(`⚠️  Failed to remove user from Organization:`, orgError.message);
+        }
+      }
+
+      // Block user and clear company metadata in Auth0
+      try {
+        await updateAuth0User(user.auth0_user_id, {
+          blocked: true,
+          company_id: null,
+          org_id: null
+        });
+        console.log(`✅ User ${user.email} blocked and company metadata cleared in Auth0`);
       } catch (auth0Error) {
-        console.error(`⚠️  User deleted from DB but Auth0 sync failed:`, auth0Error.message);
+        console.error(`⚠️  User deactivated in DB but Auth0 sync failed:`, auth0Error.message);
       }
     }
 
-    return result.rowCount > 0;
+    return dbUser;
   } catch (error) {
-    console.error('Error deleting company user:', error);
+    console.error('Error removing company user:', error);
     throw error;
   }
 };

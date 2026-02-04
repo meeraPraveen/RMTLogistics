@@ -125,12 +125,17 @@ export const updateAuth0User = async (auth0UserId, updates) => {
     }
 
     // Update role, permissions, and company info in app_metadata if provided
-    if (updates.role || updates.permissions || updates.company_id || updates.org_id) {
+    const hasRole = updates.role !== undefined;
+    const hasPermissions = updates.permissions !== undefined;
+    const hasCompanyId = updates.company_id !== undefined;
+    const hasOrgId = updates.org_id !== undefined;
+
+    if (hasRole || hasPermissions || hasCompanyId || hasOrgId) {
       updateData.app_metadata = {
-        ...(updates.role && { role: updates.role }),
-        ...(updates.permissions && { permissions: updates.permissions }),
-        ...(updates.company_id && { company_id: updates.company_id }),
-        ...(updates.org_id && { org_id: updates.org_id }),
+        ...(hasRole && { role: updates.role }),
+        ...(hasPermissions && { permissions: updates.permissions }),
+        ...(hasCompanyId && { company_id: updates.company_id }),
+        ...(hasOrgId && { org_id: updates.org_id }),
         db_synced: true,
         synced_at: new Date().toISOString()
       };

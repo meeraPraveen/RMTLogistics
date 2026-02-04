@@ -45,7 +45,9 @@ router.get('/', requireModule(MODULES.USER_MANAGEMENT), async (req, res) => {
       is_active: user.is_active,
       status: user.status,
       created_at: user.created_at,
-      last_login: user.last_login
+      last_login: user.last_login,
+      company_id: user.company_id,
+      company_name: user.company_name
     }));
 
     res.json({
@@ -133,17 +135,17 @@ router.post('/', requireModule(MODULES.USER_MANAGEMENT), async (req, res) => {
 router.put('/:id', requireModule(MODULES.USER_MANAGEMENT), async (req, res) => {
   try {
     const userId = parseInt(req.params.id);
-    const { name, role, is_active } = req.body;
+    const { name, role, is_active, company_id } = req.body;
 
-    if (!name && !role && is_active === undefined) {
+    if (!name && !role && is_active === undefined && company_id === undefined) {
       return res.status(400).json({
         success: false,
         error: 'No fields to update',
-        message: 'At least one field (name, role, or is_active) is required'
+        message: 'At least one field (name, role, is_active, or company_id) is required'
       });
     }
 
-    const user = await updateUser(userId, { name, role, is_active });
+    const user = await updateUser(userId, { name, role, is_active, company_id });
 
     res.json({
       success: true,
@@ -153,7 +155,8 @@ router.put('/:id', requireModule(MODULES.USER_MANAGEMENT), async (req, res) => {
         email: user.email,
         name: user.name,
         role: user.role,
-        is_active: user.is_active
+        is_active: user.is_active,
+        company_id: user.company_id
       }
     });
   } catch (error) {

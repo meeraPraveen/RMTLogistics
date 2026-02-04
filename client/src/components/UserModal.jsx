@@ -3,12 +3,13 @@ import './UserModal.css';
 
 const ROLES = ['SuperAdmin', 'Admin', 'Lead Artist', 'Artist', 'Production Tech'];
 
-const UserModal = ({ isOpen, onClose, onSave, user, mode }) => {
+const UserModal = ({ isOpen, onClose, onSave, user, mode, companies = [] }) => {
   const [formData, setFormData] = useState({
     email: '',
     name: '',
     role: 'Artist',
-    is_active: true
+    is_active: true,
+    company_id: ''
   });
   const [errors, setErrors] = useState({});
 
@@ -18,14 +19,16 @@ const UserModal = ({ isOpen, onClose, onSave, user, mode }) => {
         email: user.email || '',
         name: user.name || '',
         role: user.role || 'Artist',
-        is_active: user.is_active !== undefined ? user.is_active : true
+        is_active: user.is_active !== undefined ? user.is_active : true,
+        company_id: user.company_id || ''
       });
     } else {
       setFormData({
         email: '',
         name: '',
         role: 'Artist',
-        is_active: true
+        is_active: true,
+        company_id: ''
       });
     }
     setErrors({});
@@ -125,6 +128,22 @@ const UserModal = ({ isOpen, onClose, onSave, user, mode }) => {
               ))}
             </select>
             {errors.role && <span className="error-message">{errors.role}</span>}
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="company_id">Company</label>
+            <select
+              id="company_id"
+              name="company_id"
+              value={formData.company_id}
+              onChange={handleChange}
+            >
+              <option value="">No Company (Individual User)</option>
+              {companies.filter(c => c.is_active).map(company => (
+                <option key={company.id} value={company.id}>{company.name}</option>
+              ))}
+            </select>
+            <span className="form-hint">Assign user to a company for B2B access</span>
           </div>
 
           {mode === 'edit' && (

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { usersApi, permissionsApi, setAuthToken } from '../utils/api';
+import { usersApi, permissionsApi, companiesApi, setAuthToken } from '../utils/api';
 import { useAuth0 } from '@auth0/auth0-react';
 import RolePermissions from './RolePermissions';
 import CompaniesTab from './CompaniesTab';
@@ -12,6 +12,7 @@ const UserManagement = () => {
   const { getIdTokenClaims, user } = useAuth0();
   const [activeTab, setActiveTab] = useState('users');
   const [users, setUsers] = useState([]);
+  const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
@@ -39,7 +40,19 @@ const UserManagement = () => {
   useEffect(() => {
     loadCurrentUser();
     loadUsers();
+    loadCompanies();
   }, [pagination.page, filters]);
+
+  const loadCompanies = async () => {
+    try {
+      const idToken = await getIdTokenClaims();
+      setAuthToken(idToken.__raw);
+      const response = await companiesApi.getAll({ limit: 100 });
+      setCompanies(response.data.data || []);
+    } catch (error) {
+      console.error('Failed to load companies:', error);
+    }
+  };
 
   const loadCurrentUser = async () => {
     try {
@@ -317,6 +330,7 @@ const UserManagement = () => {
                 <tr>
                   <th>Name</th>
                   <th>Email</th>
+                  <th>Company</th>
                   <th>Role</th>
                   <th>Status</th>
                   <th>Created</th>
@@ -327,7 +341,7 @@ const UserManagement = () => {
               <tbody>
                 {users.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="no-data">
+                    <td colSpan="8" className="no-data">
                       No users found
                     </td>
                   </tr>
@@ -338,6 +352,7 @@ const UserManagement = () => {
                       <tr key={user.id}>
                         <td>{user.name || <em>Not set</em>}</td>
                         <td>{user.email}</td>
+                        <td>{user.company_name || <em>-</em>}</td>
                         <td>
                           <span className="role-badge">{user.role}</span>
                         </td>
@@ -423,6 +438,7 @@ const UserManagement = () => {
         onSave={handleModalSave}
         user={selectedUser}
         mode={modalMode}
+        companies={companies}
       />
     </div>
   );
