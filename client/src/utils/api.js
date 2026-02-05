@@ -55,6 +55,7 @@ export const permissionsApi = {
 // Users API
 export const usersApi = {
   getAll: (params) => api.get('/users', { params }),
+  getCurrentUser: () => api.get('/users/me'),
   create: (userData) => api.post('/users', userData),
   update: (id, userData) => api.put(`/users/${id}`, userData),
   delete: (id) => api.delete(`/users/${id}`),
@@ -69,7 +70,14 @@ export const ordersApi = {
   getStats: () => api.get('/orders/stats'),
   create: (orderData) => api.post('/orders', orderData),
   update: (id, orderData) => api.put(`/orders/${id}`, orderData),
-  delete: (id) => api.delete(`/orders/${id}`)
+  delete: (id) => api.delete(`/orders/${id}`),
+  // Image upload variants (use FormData)
+  createWithImage: (formData) => api.post('/orders', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  updateWithImage: (id, formData) => api.put(`/orders/${id}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
 };
 
 // Companies API
@@ -87,6 +95,20 @@ export const companiesApi = {
   updateUser: (companyId, userId, userData) => api.put(`/companies/${companyId}/users/${userId}`, userData),
   deleteUser: (companyId, userId) => api.delete(`/companies/${companyId}/users/${userId}`),
   toggleUserStatus: (companyId, userId) => api.post(`/companies/${companyId}/users/${userId}/toggle-status`)
+};
+
+// Inventory API
+export const inventoryApi = {
+  getAll: (params) => api.get('/inventory', { params }),
+  getById: (id) => api.get(`/inventory/${id}`),
+  getBySku: (sku) => api.get(`/inventory/sku/${encodeURIComponent(sku)}`),
+  getStats: () => api.get('/inventory/stats'),
+  getLowStock: () => api.get('/inventory/low-stock'),
+  getCatalog: () => api.get('/inventory/catalog'),
+  create: (data) => api.post('/inventory', data),
+  update: (id, data) => api.put(`/inventory/${id}`, data),
+  adjustStock: (id, adjustment) => api.post(`/inventory/${id}/adjust-stock`, { adjustment }),
+  delete: (id) => api.delete(`/inventory/${id}`)
 };
 
 // Modules API

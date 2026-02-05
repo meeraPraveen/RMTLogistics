@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   getAllUsers,
+  getUserByAuth0Id,
   createUser,
   updateUser,
   deleteUser,
@@ -13,6 +14,49 @@ import { requireModule, requireSuperAdmin } from '../middleware/rbac.middleware.
 import { MODULES } from '../config/rbac.config.js';
 
 const router = express.Router();
+
+/**
+ * GET /api/users/me
+ * Get current user's information
+ * Accessible by any authenticated user
+ */
+router.get('/me', async (req, res) => {
+  try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        success: false,
+        error: 'Not authenticated'
+      });
+    }
+
+    const user = await getUserByAuth0Id(req.user.auth0UserId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        company_id: user.company_id
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching current user:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch user info',
+      message: error.message
+    });
+  }
+});
 
 /**
  * GET /api/users
@@ -74,11 +118,11 @@ router.post('/', requireModule(MODULES.USER_MANAGEMENT), async (req, res) => {
   try {
     const { email, name, role } = req.body;
 
-    if (!email || !name || !role) {
+    if (!email || !name) {
       return res.status(400).json({
         success: false,
         error: 'Missing required fields',
-        message: 'Email, name, and role are required'
+        message: 'Email and name are required'
       });
     }
 
@@ -94,7 +138,7 @@ router.post('/', requireModule(MODULES.USER_MANAGEMENT), async (req, res) => {
     // Get current user's ID for audit
     const createdBy = req.user.id;
 
-    const user = await createUser({ email, name, role }, createdBy);
+    const user = await createUser({ email, name, role: role || null }, createdBy);
 
     res.status(201).json({
       success: true,
