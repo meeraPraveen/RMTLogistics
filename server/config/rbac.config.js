@@ -29,7 +29,8 @@ export const ROLES = {
   ADMIN: 'Admin',
   LEAD_ARTIST: 'Lead Artist',
   ARTIST: 'Artist',
-  PRODUCTION_TECH: 'Production Tech'
+  PRODUCTION_TECH: 'Production Tech',
+  B2B_USER: 'B2B User'
 };
 
 /**
@@ -57,6 +58,9 @@ export const rolePermissions = {
   },
   [ROLES.PRODUCTION_TECH]: {
     [MODULES.PRINTING_SOFTWARE]: [PERMISSIONS.READ, PERMISSIONS.WRITE, PERMISSIONS.UPDATE]
+  },
+  [ROLES.B2B_USER]: {
+    [MODULES.ORDER_MANAGEMENT]: [PERMISSIONS.READ, PERMISSIONS.WRITE, PERMISSIONS.UPDATE, PERMISSIONS.DELETE]
   }
 };
 

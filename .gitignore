@@ -3,6 +3,16 @@ node_modules/
 .DS_Store
 *.log
 
+# Build outputs
+client/dist/
+client/build/
+
+# Claude Code
+.claude/
+
+# Data files
+data/
+
 # Uploaded files (but keep the directory structure)
 uploads/*
 !uploads/.gitkeep

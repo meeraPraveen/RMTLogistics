@@ -23,29 +23,13 @@ const Login = () => {
     <div className="login-container">
       <div className="login-card">
         <div className="login-header">
-          <h1>Auth0 RBAC System</h1>
-          <p>Role-Based Access Control Application</p>
+          <h1>Red Moose Trading Inc</h1>
         </div>
 
         <div className="login-content">
-          <p className="login-description">
-            Secure access to multiple modules with fine-grained permissions
-          </p>
-
           <button onClick={() => loginWithRedirect()} className="login-button">
-            Sign In with Auth0
+            Sign In
           </button>
-
-          <div className="features">
-            <h3>System Modules</h3>
-            <ul>
-              <li>User Management</li>
-              <li>Order Management</li>
-              <li>Inventory Management</li>
-              <li>Printing Software</li>
-              <li>System Configuration</li>
-            </ul>
-          </div>
         </div>
       </div>
     </div>

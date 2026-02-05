@@ -100,15 +100,15 @@ inventoryManagementRouter.get('/', requireModule(MODULES.INVENTORY_MANAGEMENT), 
   });
 });
 
-inventoryManagementRouter.get('/items', requirePermission(MODULES.INVENTORY_MANAGEMENT, PERMISSIONS.READ), (req, res) => {
-  res.json({
-    success: true,
-    data: [
-      { id: 1, name: 'T-Shirt Blanks', sku: 'TSH-001', quantity: 500, location: 'Warehouse A' },
-      { id: 2, name: 'Ink Cartridge - Black', sku: 'INK-BLK', quantity: 25, location: 'Supply Room' },
-      { id: 3, name: 'Transfer Paper', sku: 'PPR-TRF', quantity: 1000, location: 'Warehouse B' }
-    ]
-  });
+inventoryManagementRouter.get('/items', requirePermission(MODULES.INVENTORY_MANAGEMENT, PERMISSIONS.READ), async (req, res) => {
+  try {
+    const { getAllProducts } = await import('../services/inventory.service.js');
+    const result = await getAllProducts({ page: 1, limit: 100, is_parent: false });
+    res.json({ success: true, data: result.products });
+  } catch (error) {
+    console.error('Error fetching inventory items:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 inventoryManagementRouter.post('/items', requirePermission(MODULES.INVENTORY_MANAGEMENT, PERMISSIONS.WRITE), (req, res) => {

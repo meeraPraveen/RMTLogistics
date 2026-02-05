@@ -8,11 +8,11 @@ const Dashboard = () => {
   const { permissions, hasModuleAccess } = usePermissions();
 
   const modules = [
-    { name: 'User Management', module: 'user_management', icon: '👥', color: '#6366f1' },
-    { name: 'Order Management', module: 'order_management', icon: '📦', color: '#8b5cf6' },
-    { name: 'Inventory Management', module: 'inventory_management', icon: '📊', color: '#ec4899' },
-    { name: 'Printing Software', module: 'printing_software', icon: '🖨️', color: '#f59e0b' },
-    { name: 'System Config', module: 'system_config', icon: '⚙️', color: '#10b981' }
+    { name: 'User Management', module: 'user_management', icon: '👥', color: '#722F37' },
+    { name: 'Order Management', module: 'order_management', icon: '📦', color: '#5C1E2A' },
+    { name: 'Inventory Management', module: 'inventory_management', icon: '📊', color: '#4A1523' },
+    { name: 'Printing Software', module: 'printing_software', icon: '🖨️', color: '#1f2937' },
+    { name: 'System Config', module: 'system_config', icon: '⚙️', color: '#111827' }
   ];
 
   return (
@@ -24,7 +24,7 @@ const Dashboard = () => {
 
       <div className="stats-grid">
         <div className="stat-card">
-          <div className="stat-icon" style={{ background: '#eef2ff', color: '#6366f1' }}>👤</div>
+          <div className="stat-icon" style={{ background: '#FDF2F4', color: '#722F37' }}>👤</div>
           <div className="stat-content">
             <p className="stat-label">Your Role</p>
             <p className="stat-value">{permissions?.role || 'Loading...'}</p>

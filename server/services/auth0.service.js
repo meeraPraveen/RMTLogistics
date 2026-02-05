@@ -60,9 +60,10 @@ export const createAuth0User = async (userData) => {
 
       // Store PostgreSQL role and permissions in Auth0 metadata
       // The Auth0 Action reads these and adds them to the token
+      // If no role is assigned, omit role/permissions so Auth0 Action blocks login
       app_metadata: {
-        role: userData.role,
-        permissions: userData.permissions || {},
+        ...(userData.role && { role: userData.role }),
+        ...(userData.role && { permissions: userData.permissions || {} }),
         // B2B company info (if provided)
         ...(userData.company_id && { company_id: userData.company_id }),
         ...(userData.org_id && { org_id: userData.org_id }),
@@ -239,20 +240,24 @@ const syncExistingAuth0User = async (userData) => {
     console.log(`   Auth0 User ID: ${auth0User.user_id}`);
     console.log(`   Current blocked status: ${auth0User.blocked}`);
     console.log(`   Current app_metadata: ${JSON.stringify(auth0User.app_metadata)}`);
-    console.log(`   New role to sync: ${userData.role}`);
+    console.log(`   New role to sync: ${userData.role || 'none'}`);
     console.log(`   New permissions to sync: ${JSON.stringify(userData.permissions)}`);
 
     // Update Auth0 user: unblock + sync role + permissions + company info
-    await updateAuth0User(auth0User.user_id, {
+    const syncData = {
       name: userData.name,
-      role: userData.role,
-      permissions: userData.permissions || {},
       company_id: userData.company_id,
       org_id: userData.org_id,
       blocked: false  // Unblock user if they were previously blocked
-    });
+    };
 
-    console.log(`✅ User ${userData.email} synced to Auth0 with role: ${userData.role}`);
+    // Always sync role - if no role assigned, explicitly clear it
+    syncData.role = userData.role || null;
+    syncData.permissions = userData.role ? (userData.permissions || {}) : {};
+
+    await updateAuth0User(auth0User.user_id, syncData);
+
+    console.log(`✅ User ${userData.email} synced to Auth0 with role: ${userData.role || 'none'}`);
 
     return {
       auth0_user_id: auth0User.user_id,

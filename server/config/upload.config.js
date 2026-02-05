@@ -10,14 +10,20 @@ const __dirname = dirname(__filename);
 // Configure storage for order images
 const orderStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    // Use internal_order_id from request body or generate temp folder
-    const orderId = req.body.internal_order_id || 'temp';
-    const uploadPath = path.join(__dirname, '../../uploads/orders', orderId);
+    // Use orderFolderPath set by middleware
+    // Structure: {order_type}/{company_name (B2B only)}/{platform_order_id or internal_order_id}
+    // req.orderFolderPath is set by prepareNewOrderUpload or prepareUpdateOrderUpload middleware
+    const folderPath = req.orderFolderPath || req.body.internal_order_id || 'temp';
+    const uploadPath = path.join(__dirname, '../../uploads/orders', folderPath);
 
-    // Create directory if it doesn't exist
+    // Create directory if it doesn't exist (recursive creates parent folders too)
     if (!fs.existsSync(uploadPath)) {
       fs.mkdirSync(uploadPath, { recursive: true });
     }
+
+    // Store the upload path for later use
+    req.orderUploadPath = uploadPath;
+    req.orderFolderPath = folderPath;
 
     cb(null, uploadPath);
   },
@@ -41,12 +47,13 @@ const imageFileFilter = (req, file, cb) => {
   }
 };
 
-// Multer configuration for order images
+// Multer configuration for order images (supports up to 5 images)
 export const uploadOrderImage = multer({
   storage: orderStorage,
   fileFilter: imageFileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB max file size
+    fileSize: 10 * 1024 * 1024, // 10MB max file size per image
+    files: 5 // Maximum 5 files per upload
   }
 });
 
@@ -57,7 +64,14 @@ export const handleUploadError = (err, req, res, next) => {
       return res.status(400).json({
         success: false,
         error: 'File too large',
-        message: 'File size cannot exceed 10MB'
+        message: 'Each file size cannot exceed 10MB'
+      });
+    }
+    if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') {
+      return res.status(400).json({
+        success: false,
+        error: 'Too many files',
+        message: 'Maximum 5 images allowed per order'
       });
     }
     return res.status(400).json({

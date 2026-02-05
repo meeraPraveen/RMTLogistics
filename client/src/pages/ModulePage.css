@@ -36,8 +36,8 @@
 }
 
 .permissions-info {
-  background: #eef2ff;
-  border: 1px solid #c7d2fe;
+  background: #FDF2F4;
+  border: 1px solid #F0D0D6;
   border-radius: 8px;
   padding: 1rem;
   margin-bottom: 2rem;
@@ -59,8 +59,8 @@
 
 .badge {
   padding: 0.25rem 0.75rem;
-  background: #dbeafe;
-  color: #1e40af;
+  background: #FDF2F4;
+  color: #722F37;
   border-radius: 20px;
   font-size: 0.75rem;
   font-weight: 600;
@@ -72,8 +72,8 @@
 }
 
 .badge.danger {
-  background: #fee2e2;
-  color: #991b1b;
+  background: #F9E4E8;
+  color: #4A1523;
 }
 
 .data-table {
@@ -148,13 +148,13 @@ tbody tr:hover {
 
 .status-badge.ready,
 .status-badge.ready-to-print {
-  background: #c7d2fe;
-  color: #3730a3;
+  background: #F0D0D6;
+  color: #4A1523;
 }
 
 .status-badge.in-progress {
-  background: #ddd6fe;
-  color: #5b21b6;
+  background: #F9E4E8;
+  color: #5C1E2A;
 }
 
 .status-badge.shipped {
@@ -215,7 +215,7 @@ tbody tr:hover {
 }
 
 .btn-small.danger:hover {
-  background: #dc2626;
+  background: #722F37;
 }
 
 .low-stock {

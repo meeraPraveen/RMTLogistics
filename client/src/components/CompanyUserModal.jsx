@@ -2,13 +2,13 @@ import { useState, useEffect } from 'react';
 import './UserModal.css';
 
 // B2B roles - excludes SuperAdmin
-const COMPANY_ROLES = ['Admin', 'Lead Artist', 'Artist', 'Production Tech'];
+const COMPANY_ROLES = ['Admin', 'Lead Artist', 'Artist', 'Production Tech', 'B2B User'];
 
 const CompanyUserModal = ({ isOpen, onClose, onSave, user, mode, companyName }) => {
   const [formData, setFormData] = useState({
     email: '',
     name: '',
-    role: 'Artist',
+    role: '',
     is_active: true
   });
   const [errors, setErrors] = useState({});
@@ -18,14 +18,14 @@ const CompanyUserModal = ({ isOpen, onClose, onSave, user, mode, companyName }) 
       setFormData({
         email: user.email || '',
         name: user.name || '',
-        role: user.role || 'Artist',
+        role: user.role || '',
         is_active: user.is_active !== undefined ? user.is_active : true
       });
     } else {
       setFormData({
         email: '',
         name: '',
-        role: 'Artist',
+        role: '',
         is_active: true
       });
     }
@@ -47,9 +47,7 @@ const CompanyUserModal = ({ isOpen, onClose, onSave, user, mode, companyName }) 
       }
     }
 
-    if (!formData.role) {
-      newErrors.role = 'Role is required';
-    }
+    // Role is optional - user can be created without one
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -58,7 +56,11 @@ const CompanyUserModal = ({ isOpen, onClose, onSave, user, mode, companyName }) 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (validateForm()) {
-      onSave(formData);
+      const submitData = {
+        ...formData,
+        role: formData.role || null
+      };
+      onSave(submitData);
     }
   };
 
@@ -115,20 +117,24 @@ const CompanyUserModal = ({ isOpen, onClose, onSave, user, mode, companyName }) 
           </div>
 
           <div className="form-group">
-            <label htmlFor="company-user-role">Role *</label>
+            <label htmlFor="company-user-role">Role</label>
             <select
               id="company-user-role"
               name="role"
               value={formData.role}
               onChange={handleChange}
-              className={errors.role ? 'error' : ''}
             >
+              <option value="">-- No Role (cannot login) --</option>
               {COMPANY_ROLES.map(role => (
                 <option key={role} value={role}>{role}</option>
               ))}
             </select>
-            {errors.role && <span className="error-message">{errors.role}</span>}
-            <small className="form-hint">Company users cannot have SuperAdmin role</small>
+            {!formData.role && (
+              <span className="form-hint">User will not be able to login until a role is assigned</span>
+            )}
+            {formData.role && (
+              <small className="form-hint">Company users cannot have SuperAdmin role</small>
+            )}
           </div>
 
           {mode === 'edit' && (

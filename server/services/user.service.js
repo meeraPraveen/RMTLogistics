@@ -39,7 +39,7 @@ export const getUserRole = async (auth0UserId) => {
 export const getUserByAuth0Id = async (auth0UserId) => {
   try {
     const result = await query(
-      `SELECT id, auth0_user_id, email, name, role, is_active
+      `SELECT id, auth0_user_id, email, name, role, is_active, company_id
        FROM users
        WHERE auth0_user_id = $1`,
       [auth0UserId]
@@ -86,7 +86,7 @@ export const getUserRoleByEmail = async (email) => {
  * @param {string} role - User role (default: 'Artist')
  * @returns {Promise<Object>} - Created/updated user
  */
-export const upsertUser = async (auth0UserId, email, role = 'Artist') => {
+export const upsertUser = async (auth0UserId, email, role = null) => {
   try {
     // First check if user exists by email
     const existingUser = await query(
@@ -174,8 +174,12 @@ export const getAllUsers = async (options = {}) => {
 
     // Build WHERE clause
     if (role) {
-      conditions.push(`role = $${paramIndex++}`);
-      params.push(role);
+      if (role === 'unassigned') {
+        conditions.push(`role IS NULL`);
+      } else {
+        conditions.push(`role = $${paramIndex++}`);
+        params.push(role);
+      }
     }
 
     if (is_active !== undefined) {
@@ -251,20 +255,26 @@ export const createUser = async (userData, createdBy) => {
 
     // Step 2: Sync to Auth0 for authentication
     try {
-      // Fetch permissions for the role from database
-      const { getRolePermissions } = await import('./permissions.service.js');
-      let permissions = await getRolePermissions(dbUser.role);
-      console.log(`📋 Creating user: Fetched permissions for role "${dbUser.role}" from DB:`, JSON.stringify(permissions));
+      let permissions = {};
 
-      // Fallback to rbac.config.js if no permissions in DB
-      if (!permissions || Object.keys(permissions).length === 0) {
-        console.warn(`⚠️  No permissions found in DB for role "${dbUser.role}" - using rbac.config.js fallback`);
-        const { getRolePermissions: getConfigPermissions } = await import('../config/rbac.config.js');
-        permissions = await getConfigPermissions(dbUser.role);
-        console.log(`📋 Fallback permissions from rbac.config.js:`, JSON.stringify(permissions));
+      // Only fetch permissions if a role is assigned
+      if (dbUser.role) {
+        const { getRolePermissions } = await import('./permissions.service.js');
+        permissions = await getRolePermissions(dbUser.role);
+        console.log(`📋 Creating user: Fetched permissions for role "${dbUser.role}" from DB:`, JSON.stringify(permissions));
+
+        // Fallback to rbac.config.js if no permissions in DB
+        if (!permissions || Object.keys(permissions).length === 0) {
+          console.warn(`⚠️  No permissions found in DB for role "${dbUser.role}" - using rbac.config.js fallback`);
+          const { getRolePermissions: getConfigPermissions } = await import('../config/rbac.config.js');
+          permissions = await getConfigPermissions(dbUser.role);
+          console.log(`📋 Fallback permissions from rbac.config.js:`, JSON.stringify(permissions));
+        }
+      } else {
+        console.log(`ℹ️  Creating user ${dbUser.email} without a role - user will not be able to login until role is assigned`);
       }
 
-      console.log(`📤 Syncing to Auth0: email=${dbUser.email}, role=${dbUser.role}, permissions=${JSON.stringify(permissions)}`);
+      console.log(`📤 Syncing to Auth0: email=${dbUser.email}, role=${dbUser.role || 'none'}, permissions=${JSON.stringify(permissions)}`);
 
       const auth0Result = await createAuth0User({
         email: dbUser.email,
@@ -642,20 +652,26 @@ export const reactivateUser = async (auth0UserId) => {
     // Step 2: Sync to Auth0 (unblock user and sync role/permissions)
     if (auth0UserId && !auth0UserId.startsWith('pending_')) {
       try {
-        // Fetch permissions for the user's role
-        const { getRolePermissions } = await import('../config/rbac.config.js');
-        const permissions = await getRolePermissions(dbUser.role);
-        console.log(`📋 Fetched permissions for role ${dbUser.role}:`, JSON.stringify(permissions));
+        if (dbUser.role) {
+          // Fetch permissions for the user's role
+          const { getRolePermissions } = await import('../config/rbac.config.js');
+          const permissions = await getRolePermissions(dbUser.role);
+          console.log(`📋 Fetched permissions for role ${dbUser.role}:`, JSON.stringify(permissions));
 
-        // Unblock and sync role + permissions to Auth0
-        console.log(`📤 Syncing to Auth0: unblock + role (${dbUser.role}) + permissions`);
-        const auth0Result = await updateAuth0User(auth0UserId, {
-          blocked: false,
-          role: dbUser.role,
-          permissions: permissions
-        });
-        console.log(`✅ Auth0 sync result:`, JSON.stringify(auth0Result));
-        console.log(`✅ User ${dbUser.email} reactivated, unblocked, and synced role/permissions to Auth0`);
+          // Unblock and sync role + permissions to Auth0
+          console.log(`📤 Syncing to Auth0: unblock + role (${dbUser.role}) + permissions`);
+          const auth0Result = await updateAuth0User(auth0UserId, {
+            blocked: false,
+            role: dbUser.role,
+            permissions: permissions
+          });
+          console.log(`✅ Auth0 sync result:`, JSON.stringify(auth0Result));
+          console.log(`✅ User ${dbUser.email} reactivated, unblocked, and synced role/permissions to Auth0`);
+        } else {
+          // No role assigned - just unblock, user still can't login via Auth0 Action
+          await updateAuth0User(auth0UserId, { blocked: false });
+          console.log(`ℹ️  User ${dbUser.email} unblocked but has no role - cannot login until role is assigned`);
+        }
       } catch (auth0Error) {
         console.error(`⚠️  User reactivated in DB but Auth0 sync failed for ${dbUser.email}:`, auth0Error.message);
         console.error(`⚠️  Full error:`, auth0Error);

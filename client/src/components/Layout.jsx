@@ -56,7 +56,7 @@ const Layout = () => {
     <div className="layout">
       <nav className="sidebar">
         <div className="sidebar-header">
-          <h2>RBAC System</h2>
+          <h2>Red Moose Logistics</h2>
         </div>
 
         <div className="sidebar-user">

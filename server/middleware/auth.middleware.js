@@ -64,6 +64,9 @@ export const extractUserInfo = async (req, res, next) => {
       // Extract permissions from token
       const tokenPermissions = req.auth.app_permissions || req.auth['https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/app_permissions'] || {};
 
+      // Extract company_id from token (for B2B users)
+      const tokenCompanyId = req.auth.company_id || req.auth['https://dev-ybc7o1rzmlt6fu4c.ca.auth0.com/company_id'] || null;
+
       console.log(`🔐 Auth0 authenticated user: ${email} (${auth0UserId})`);
       console.log(`🎫 Token-based auth - Role: ${tokenRole}, Modules: ${Object.keys(tokenPermissions).join(', ')}`);
 
@@ -138,16 +141,20 @@ export const extractUserInfo = async (req, res, next) => {
         console.error('Failed to update last login:', err)
       );
 
+      // Get company_id from DB user if not in token (fallback)
+      const effectiveCompanyId = tokenCompanyId || dbUser?.company_id || null;
+
       // Use effective role and permissions (from token or DB fallback)
       req.user = {
         id: dbUserId, // Database user ID (for foreign key references)
         auth0UserId: auth0UserId, // Auth0 user ID
         email: email,
         role: effectiveRole, // Role from token or DB
-        permissions: effectivePermissions // Permissions from token or DB
+        permissions: effectivePermissions, // Permissions from token or DB
+        company_id: effectiveCompanyId // Company ID for B2B users
       };
 
-      console.log(`✅ Token-based authorization - User: ${email}, Role: ${effectiveRole}, Modules: ${Object.keys(effectivePermissions).join(', ')}`);
+      console.log(`✅ Token-based authorization - User: ${email}, Role: ${effectiveRole}, Company: ${effectiveCompanyId || 'N/A'}, Modules: ${Object.keys(effectivePermissions).join(', ')}`);
 
       next();
     } catch (error) {
@@ -180,7 +187,8 @@ export const mockAuth = (req, res, next) => {
         inventory_management: ['read', 'write', 'update', 'delete'],
         printing_software: ['read', 'write', 'update', 'delete'],
         system_config: ['read', 'write', 'update', 'delete']
-      }
+      },
+      company_id: null // SuperAdmin has no company restriction
     };
     console.log('⚠️  Using mock authentication - User:', req.user.email, 'Role:', req.user.role);
   }

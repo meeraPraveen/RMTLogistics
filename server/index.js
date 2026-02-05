@@ -1,15 +1,21 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { checkJwt, extractUserInfo, mockAuth } from './middleware/auth.middleware.js';
 import permissionsRouter from './routes/permissions.routes.js';
 import modulesRouter from './routes/modules.routes.js';
 import usersRouter from './routes/users.routes.js';
 import ordersRouter from './routes/orders.routes.js';
 import companiesRouter from './routes/companies.routes.js';
+import inventoryRouter from './routes/inventory.routes.js';
 import adminRouter from './routes/admin.routes.js';
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -37,12 +43,16 @@ if (process.env.NODE_ENV === 'development') {
   app.use(mockAuth);
 }
 
+// Serve uploaded files (protected - requires authentication)
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
 // API Routes
 app.use('/api/permissions', permissionsRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/modules', modulesRouter);
 app.use('/api/orders', ordersRouter);
 app.use('/api/companies', companiesRouter);
+app.use('/api/inventory', inventoryRouter);
 app.use('/api/admin', adminRouter);
 
 // Welcome endpoint

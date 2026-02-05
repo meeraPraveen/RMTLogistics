@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import './UserModal.css';
 
-const ROLES = ['SuperAdmin', 'Admin', 'Lead Artist', 'Artist', 'Production Tech'];
+const ROLES = ['SuperAdmin', 'Admin', 'Lead Artist', 'Artist', 'Production Tech', 'B2B User'];
 
 const UserModal = ({ isOpen, onClose, onSave, user, mode, companies = [] }) => {
   const [formData, setFormData] = useState({
     email: '',
     name: '',
-    role: 'Artist',
+    role: '',
     is_active: true,
     company_id: ''
   });
@@ -18,7 +18,7 @@ const UserModal = ({ isOpen, onClose, onSave, user, mode, companies = [] }) => {
       setFormData({
         email: user.email || '',
         name: user.name || '',
-        role: user.role || 'Artist',
+        role: user.role || '',
         is_active: user.is_active !== undefined ? user.is_active : true,
         company_id: user.company_id || ''
       });
@@ -26,7 +26,7 @@ const UserModal = ({ isOpen, onClose, onSave, user, mode, companies = [] }) => {
       setFormData({
         email: '',
         name: '',
-        role: 'Artist',
+        role: '',
         is_active: true,
         company_id: ''
       });
@@ -49,8 +49,11 @@ const UserModal = ({ isOpen, onClose, onSave, user, mode, companies = [] }) => {
       }
     }
 
-    if (!formData.role) {
-      newErrors.role = 'Role is required';
+    // Role is optional - user can be created without one
+
+    // Company is required when role is B2B User
+    if (formData.role === 'B2B User' && !formData.company_id) {
+      newErrors.company_id = 'Company is required for B2B User role';
     }
 
     setErrors(newErrors);
@@ -60,16 +63,27 @@ const UserModal = ({ isOpen, onClose, onSave, user, mode, companies = [] }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (validateForm()) {
-      onSave(formData);
+      const submitData = {
+        ...formData,
+        role: formData.role || null
+      };
+      onSave(submitData);
     }
   };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
+    setFormData(prev => {
+      const updated = {
+        ...prev,
+        [name]: type === 'checkbox' ? checked : value
+      };
+      // Clear company_id when switching away from B2B User role
+      if (name === 'role' && value !== 'B2B User') {
+        updated.company_id = '';
+      }
+      return updated;
+    });
     // Clear error for this field
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: undefined }));
@@ -115,36 +129,41 @@ const UserModal = ({ isOpen, onClose, onSave, user, mode, companies = [] }) => {
           </div>
 
           <div className="form-group">
-            <label htmlFor="role">Role *</label>
+            <label htmlFor="role">Role</label>
             <select
               id="role"
               name="role"
               value={formData.role}
               onChange={handleChange}
-              className={errors.role ? 'error' : ''}
             >
+              <option value="">-- No Role (cannot login) --</option>
               {ROLES.map(role => (
                 <option key={role} value={role}>{role}</option>
               ))}
             </select>
-            {errors.role && <span className="error-message">{errors.role}</span>}
+            {!formData.role && (
+              <span className="form-hint">User will not be able to login until a role is assigned</span>
+            )}
           </div>
 
-          <div className="form-group">
-            <label htmlFor="company_id">Company</label>
-            <select
-              id="company_id"
-              name="company_id"
-              value={formData.company_id}
-              onChange={handleChange}
-            >
-              <option value="">No Company (Individual User)</option>
-              {companies.filter(c => c.is_active).map(company => (
-                <option key={company.id} value={company.id}>{company.name}</option>
-              ))}
-            </select>
-            <span className="form-hint">Assign user to a company for B2B access</span>
-          </div>
+          {formData.role === 'B2B User' && (
+            <div className="form-group">
+              <label htmlFor="company_id">Company *</label>
+              <select
+                id="company_id"
+                name="company_id"
+                value={formData.company_id}
+                onChange={handleChange}
+                className={errors.company_id ? 'error' : ''}
+              >
+                <option value="">-- Select a Company --</option>
+                {companies.filter(c => c.is_active).map(company => (
+                  <option key={company.id} value={company.id}>{company.name}</option>
+                ))}
+              </select>
+              {errors.company_id && <span className="error-message">{errors.company_id}</span>}
+            </div>
+          )}
 
           {mode === 'edit' && (
             <div className="form-group checkbox-group">

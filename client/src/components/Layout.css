@@ -86,7 +86,7 @@
 }
 
 .nav-link.active {
-  background: #eef2ff;
+  background: #FDF2F4;
   color: var(--primary-color);
   border-left-color: var(--primary-color);
 }
@@ -108,7 +108,7 @@
 }
 
 .logout-btn:hover {
-  background: #fee2e2;
+  background: #F9E4E8;
   border-color: var(--danger-color);
   color: var(--danger-color);
 }

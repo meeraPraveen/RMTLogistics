@@ -3,7 +3,7 @@ import { permissionsApi, setAuthToken } from '../utils/api';
 import { useAuth0 } from '@auth0/auth0-react';
 import './RolePermissions.css';
 
-const ROLES = ['SuperAdmin', 'Admin', 'Lead Artist', 'Artist', 'Production Tech'];
+const ROLES = ['SuperAdmin', 'Admin', 'Lead Artist', 'Artist', 'Production Tech', 'B2B User'];
 
 const MODULES = [
   { id: 'user-management', name: 'User Management' },

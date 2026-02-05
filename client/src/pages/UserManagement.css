@@ -23,12 +23,12 @@
 }
 
 .tab:hover {
-  color: #3b82f6;
+  color: var(--primary-color);
 }
 
 .tab.active {
-  color: #3b82f6;
-  border-bottom-color: #3b82f6;
+  color: var(--primary-color);
+  border-bottom-color: var(--primary-color);
 }
 
 .page-header {
@@ -83,8 +83,8 @@
 }
 
 .message.error {
-  background: #fee2e2;
-  color: #991b1b;
+  background: #F9E4E8;
+  color: #4A1523;
   border: 1px solid #ef4444;
 }
 
@@ -124,7 +124,7 @@
 }
 
 .role-btn.active {
-  background: #eef2ff;
+  background: #FDF2F4;
   border-color: var(--primary-color);
   color: var(--primary-color);
 }
@@ -378,11 +378,17 @@
 .role-badge {
   display: inline-block;
   padding: 0.25rem 0.75rem;
-  background: #eef2ff;
-  color: #4f46e5;
+  background: #FDF2F4;
+  color: #722F37;
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 600;
+}
+
+.role-badge.no-role {
+  background: transparent;
+  color: #d97706;
+  border: 1.5px dashed #f59e0b;
 }
 
 .status-badge {
@@ -420,12 +426,12 @@
 }
 
 .delete-btn {
-  background: #fee2e2;
-  color: #991b1b;
+  background: #F9E4E8;
+  color: #4A1523;
 }
 
 .delete-btn:hover {
-  background: #fecaca;
+  background: #F0D0D6;
 }
 
 .disable-btn {
@@ -487,22 +493,22 @@
 
 /* Users Button for Companies */
 .users-btn {
-  background: #e0e7ff;
-  color: #4f46e5;
+  background: #FDF2F4;
+  color: #722F37;
 }
 
 .users-btn:hover {
-  background: #c7d2fe;
+  background: #F9E4E8;
 }
 
 .users-btn.active {
-  background: #4f46e5;
+  background: #722F37;
   color: white;
 }
 
 /* Expanded Row for Company Users */
 .users-table tbody tr.expanded {
-  background: #f0f9ff;
+  background: #FDF2F4;
 }
 
 .users-table tbody tr.expanded-row {

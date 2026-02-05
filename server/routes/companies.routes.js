@@ -270,15 +270,15 @@ router.post('/:id/users', requireSuperAdmin, async (req, res) => {
     const companyId = req.params.id;
     const { email, name, role } = req.body;
 
-    if (!email || !name || !role) {
+    if (!email || !name) {
       return res.status(400).json({
         success: false,
         error: 'Missing required fields',
-        message: 'Email, name, and role are required'
+        message: 'Email and name are required'
       });
     }
 
-    const user = await createCompanyUser(companyId, { email, name, role });
+    const user = await createCompanyUser(companyId, { email, name, role: role || null });
 
     res.status(201).json({
       success: true,

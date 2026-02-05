@@ -6,7 +6,7 @@ import CompaniesTab from './CompaniesTab';
 import UserModal from '../components/UserModal';
 import './UserManagement.css';
 
-const ROLES = ['SuperAdmin', 'Admin', 'Lead Artist', 'Artist', 'Production Tech'];
+const ROLES = ['SuperAdmin', 'Admin', 'Lead Artist', 'Artist', 'Production Tech', 'B2B User'];
 
 const UserManagement = () => {
   const { getIdTokenClaims, user } = useAuth0();
@@ -97,6 +97,7 @@ const UserManagement = () => {
 
   const getUserStatus = (user) => {
     if (!user.is_active || user.status === 'suspended') return 'Inactive';
+    if (!user.role) return 'Pending Role';
     return 'Active';
   };
 
@@ -104,6 +105,7 @@ const UserManagement = () => {
     switch (status) {
       case 'Active': return '#10b981';
       case 'Inactive': return '#ef4444';
+      case 'Pending Role': return '#f59e0b';
       default: return '#6b7280';
     }
   };
@@ -298,6 +300,7 @@ const UserManagement = () => {
                 onChange={(e) => handleFilterChange('role', e.target.value)}
               >
                 <option value="">All Roles</option>
+                <option value="unassigned">No Role (Unassigned)</option>
                 {ROLES.map(role => (
                   <option key={role} value={role}>{role}</option>
                 ))}
@@ -354,7 +357,9 @@ const UserManagement = () => {
                         <td>{user.email}</td>
                         <td>{user.company_name || <em>-</em>}</td>
                         <td>
-                          <span className="role-badge">{user.role}</span>
+                          <span className={`role-badge${!user.role ? ' no-role' : ''}`}>
+                            {user.role || 'No Role'}
+                          </span>
                         </td>
                         <td>
                           <span

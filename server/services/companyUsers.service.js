@@ -119,8 +119,13 @@ export const createCompanyUser = async (companyId, userData) => {
 
     // Step 4: Sync to Auth0 with company metadata
     try {
-      const permissions = await getRolePermissions(role);
-      console.log(`📋 Fetched permissions for role "${role}":`, JSON.stringify(permissions));
+      let permissions = {};
+      if (role) {
+        permissions = await getRolePermissions(role);
+        console.log(`📋 Fetched permissions for role "${role}":`, JSON.stringify(permissions));
+      } else {
+        console.log(`ℹ️  Creating company user ${email} without a role - will not be able to login until role is assigned`);
+      }
 
       const auth0Result = await createAuth0User({
         email: dbUser.email,

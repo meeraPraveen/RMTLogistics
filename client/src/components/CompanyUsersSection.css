@@ -28,8 +28,8 @@
 }
 
 .user-count {
-  background: #e0e7ff;
-  color: #4f46e5;
+  background: #FDF2F4;
+  color: #722F37;
   padding: 2px 10px;
   border-radius: 12px;
   font-size: 0.85rem;
@@ -42,7 +42,7 @@
 }
 
 .add-user-btn {
-  background: #4f46e5;
+  background: var(--primary-color);
   color: white;
   border: none;
   padding: 8px 16px;
@@ -54,7 +54,7 @@
 }
 
 .add-user-btn:hover {
-  background: #4338ca;
+  background: var(--primary-hover);
 }
 
 .close-section-btn {
@@ -100,7 +100,7 @@
 .company-users-filters .clear-filters-btn {
   background: none;
   border: none;
-  color: #6366f1;
+  color: var(--primary-color);
   cursor: pointer;
   font-size: 0.9rem;
 }
@@ -126,7 +126,7 @@
 }
 
 .add-first-user-btn {
-  background: #4f46e5;
+  background: var(--primary-color);
   color: white;
   border: none;
   padding: 10px 20px;
@@ -137,7 +137,7 @@
 }
 
 .add-first-user-btn:hover {
-  background: #4338ca;
+  background: var(--primary-hover);
 }
 
 .company-users-table {
@@ -176,8 +176,8 @@
 }
 
 .role-badge {
-  background: #dbeafe;
-  color: #1e40af;
+  background: #FDF2F4;
+  color: #722F37;
   padding: 4px 10px;
   border-radius: 12px;
   font-size: 0.8rem;
@@ -209,12 +209,12 @@
 }
 
 .company-users-table .edit-btn {
-  background: #e0e7ff;
-  color: #4f46e5;
+  background: #FDF2F4;
+  color: #722F37;
 }
 
 .company-users-table .edit-btn:hover {
-  background: #c7d2fe;
+  background: #F9E4E8;
 }
 
 .company-users-table .enable-btn {
@@ -236,12 +236,12 @@
 }
 
 .company-users-table .delete-btn {
-  background: #fee2e2;
-  color: #dc2626;
+  background: #F9E4E8;
+  color: #722F37;
 }
 
 .company-users-table .delete-btn:hover {
-  background: #fecaca;
+  background: #F0D0D6;
 }
 
 .company-users-pagination {
@@ -293,9 +293,9 @@
 }
 
 .company-users-section .message.error {
-  background: #fee2e2;
-  color: #991b1b;
-  border: 1px solid #fecaca;
+  background: #F9E4E8;
+  color: #4A1523;
+  border: 1px solid #F0D0D6;
 }
 
 /* Form hint for role */
