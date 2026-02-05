@@ -194,7 +194,9 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
       if (results.length > 2) {
         if (permissions?.role === 'Lead Artist') {
           // Lead Artist: only Artists
-          setAssignableUsers(results[2].data.data || []);
+          const artists = results[2].data.data || [];
+          console.log('Lead Artist - Loaded Artists:', artists);
+          setAssignableUsers(artists);
         } else {
           // Admin/SuperAdmin: combine all assignable users
           const allUsers = [
@@ -202,9 +204,14 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
             ...(results[3].data.data || []),
             ...(results[4].data.data || [])
           ];
+          console.log('Admin/SuperAdmin - Loaded assignable users:', allUsers);
           setAssignableUsers(allUsers);
         }
       }
+    } catch (err) {
+      console.error('Failed to load catalog/companies/users:', err);
+      console.error('Error details:', err.response?.data);
+    }
     } catch (err) {
       console.error('Failed to load catalog/companies/users:', err);
     }

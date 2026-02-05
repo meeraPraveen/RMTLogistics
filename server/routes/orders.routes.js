@@ -421,12 +421,19 @@ router.put('/:id', requireRole(['Artist', 'Lead Artist', 'Admin', 'SuperAdmin', 
         updates.internal_notes = req.body.internal_notes || null;
       }
 
-      // If no image or internal_notes updates, nothing for limited roles to do
+      // Allow Lead Artists to update assigned_artist_id (assign to Artists)
+      if (req.user.role === 'Lead Artist' && req.body.assigned_artist_id !== undefined) {
+        updates.assigned_artist_id = req.body.assigned_artist_id ? parseInt(req.body.assigned_artist_id) : null;
+      }
+
+      // If no updates, nothing for limited roles to do
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({
           success: false,
           error: 'No changes',
-          message: 'You can only upload images or add internal notes'
+          message: req.user.role === 'Lead Artist'
+            ? 'You can only upload images, add internal notes, or assign to artists'
+            : 'You can only upload images or add internal notes'
         });
       }
     } else {

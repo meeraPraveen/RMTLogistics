@@ -61,12 +61,36 @@ router.get('/me', async (req, res) => {
 /**
  * GET /api/users
  * Get all users with pagination and filters
- * Accessible by SuperAdmin or users with user_management access
+ * Accessible by:
+ * - SuperAdmin or users with user_management access (full access)
+ * - Lead Artists (can only query role=Artist for assignment purposes)
  * Query params: page, limit, role, is_active, search
  */
-router.get('/', requireModule(MODULES.USER_MANAGEMENT), async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const { page, limit, role, is_active, search } = req.query;
+
+    // Check permissions
+    const hasUserManagement = req.user.permissions?.user_management?.includes('read');
+    const isLeadArtist = req.user.role === 'Lead Artist';
+
+    // Lead Artists can only query for Artists (for assignment purposes)
+    if (isLeadArtist && !hasUserManagement) {
+      if (role !== 'Artist') {
+        return res.status(403).json({
+          success: false,
+          error: 'Access denied',
+          message: 'Lead Artists can only query for Artist users'
+        });
+      }
+    } else if (!hasUserManagement && !isLeadArtist) {
+      // Others need user_management permission
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied',
+        message: 'You do not have permission to access user management'
+      });
+    }
 
     const options = {
       page: page ? parseInt(page) : 1,
