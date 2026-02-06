@@ -157,10 +157,15 @@ CREATE DATABASE auth_rbac_db;
 npm run db:setup  # Creates tables
 npm run db:seed   # Inserts default permissions
 
+# Alternative: Run consolidated migration (all-in-one)
+node scripts/run-consolidated-migration.js
+
 # 3. Configure environment
 cp .env.example .env
 # Edit .env with your database credentials
 ```
+
+**Consolidated Migration**: For fresh deployments, use `migration-consolidated.sql` which includes all migrations in a single transaction. Individual migration files are also available in `database/` for incremental updates.
 
 **Database Schema:**
 - `users` - User accounts with roles (source of truth)
