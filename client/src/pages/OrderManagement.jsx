@@ -290,12 +290,6 @@ const OrderManagement = () => {
             <div className="stat-label">Completed</div>
             <div className="stat-value" style={{ color: '#10b981' }}>{stats.completed}</div>
           </div>
-          {!isArtist && (
-            <div className="stat-card">
-              <div className="stat-label">Total Revenue</div>
-              <div className="stat-value">${stats.total_revenue?.toFixed(2) || '0.00'}</div>
-            </div>
-          )}
         </div>
       )}
 

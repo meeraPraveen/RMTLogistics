@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { inventoryApi, companiesApi, usersApi, setAuthToken } from '../utils/api';
+import { inventoryApi, companiesApi, assignmentsApi, ordersApi, setAuthToken } from '../utils/api';
 import { useAuth0 } from '@auth0/auth0-react';
 import { usePermissions } from '../hooks/usePermissions';
 import './UserModal.css';
@@ -51,10 +51,12 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
   const [imagePreviews, setImagePreviews] = useState([]); // Preview URLs (both new and existing)
   const [existingImages, setExistingImages] = useState([]); // Existing image paths from server
   const [assignableUsers, setAssignableUsers] = useState([]); // Users that can be assigned to orders
+  const [selectedImageForMetadata, setSelectedImageForMetadata] = useState(null); // Selected image for metadata extraction
+  const [extractingMetadata, setExtractingMetadata] = useState(false); // Loading state for metadata extraction
   const MAX_IMAGES = 5;
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && permissions) {
       loadCatalogAndCompanies();
       if (order) {
         populateFormFromOrder(order);
@@ -62,7 +64,7 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
         resetForm();
       }
     }
-  }, [isOpen, order]);
+  }, [isOpen, order, permissions]);
 
   const populateFormFromOrder = (orderData) => {
     const shippingAddress = orderData.shipping_address || {};
@@ -166,54 +168,49 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
       const idToken = await getIdTokenClaims();
       setAuthToken(idToken.__raw);
 
-      const requests = [
-        inventoryApi.getCatalog(),
-        companiesApi.getAll({ limit: 100 })
-      ];
+      const requests = [inventoryApi.getCatalog()];
+      let companiesIndex = -1;
+      let assignmentsIndex = -1;
 
-      // Load assignable users for Admin/SuperAdmin/Lead Artist
-      if (permissions?.role === 'Admin' || permissions?.role === 'SuperAdmin' || permissions?.role === 'Lead Artist') {
-        if (permissions?.role === 'Lead Artist') {
-          // Lead Artists can only assign to Artists
-          requests.push(usersApi.getAll({ role: 'Artist', is_active: true, limit: 100 }));
-        } else {
-          // Admin/SuperAdmin can assign to all
-          requests.push(
-            usersApi.getAll({ role: 'Artist', is_active: true, limit: 100 }),
-            usersApi.getAll({ role: 'Lead Artist', is_active: true, limit: 100 }),
-            usersApi.getAll({ role: 'Production Tech', is_active: true, limit: 100 })
-          );
-        }
+      // Only Admin/SuperAdmin need companies data
+      const isAdmin = ['Admin', 'SuperAdmin'].includes(permissions?.role);
+      if (isAdmin) {
+        companiesIndex = requests.length;
+        requests.push(companiesApi.getAll({ limit: 100 }));
+      }
+
+      // Load assignable users if user can assign orders
+      const canAssign = ['Admin', 'SuperAdmin', 'Lead Artist'].includes(permissions?.role);
+      console.log('🔍 User role:', permissions?.role, '| Can assign:', canAssign);
+
+      if (canAssign) {
+        console.log('📞 Calling assignmentsApi.getAvailableUsers()...');
+        assignmentsIndex = requests.length;
+        requests.push(assignmentsApi.getAvailableUsers());
       }
 
       const results = await Promise.all(requests);
 
+      // Set catalog (always at index 0)
       setCatalog(results[0].data.data || []);
-      setCompanies(results[1].data.data || []);
 
-      if (results.length > 2) {
-        if (permissions?.role === 'Lead Artist') {
-          // Lead Artist: only Artists
-          const artists = results[2].data.data || [];
-          console.log('Lead Artist - Loaded Artists:', artists);
-          setAssignableUsers(artists);
-        } else {
-          // Admin/SuperAdmin: combine all assignable users
-          const allUsers = [
-            ...(results[2].data.data || []),
-            ...(results[3].data.data || []),
-            ...(results[4].data.data || [])
-          ];
-          console.log('Admin/SuperAdmin - Loaded assignable users:', allUsers);
-          setAssignableUsers(allUsers);
-        }
+      // Set companies if fetched
+      if (companiesIndex >= 0) {
+        setCompanies(results[companiesIndex].data.data || []);
+      }
+
+      // Set assignable users if fetched
+      if (assignmentsIndex >= 0) {
+        console.log('📦 Assignment API response:', results[assignmentsIndex]);
+        const users = results[assignmentsIndex].data.data || [];
+        console.log('✅ Setting assignable users:', users);
+        setAssignableUsers(users);
+      } else {
+        console.log('⚠️ No assignable users requested');
       }
     } catch (err) {
-      console.error('Failed to load catalog/companies/users:', err);
+      console.error('❌ Failed to load catalog/companies/users:', err);
       console.error('Error details:', err.response?.data);
-    }
-    } catch (err) {
-      console.error('Failed to load catalog/companies/users:', err);
     }
   };
 
@@ -303,6 +300,73 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
       setImageFiles(prev => prev.filter((_, i) => i !== newFileIndex));
     }
     setImagePreviews(prev => prev.filter((_, i) => i !== index));
+    // Clear selection if the removed image was selected
+    if (selectedImageForMetadata === index) {
+      setSelectedImageForMetadata(null);
+    }
+  };
+
+  const handleExtractMetadata = async () => {
+    if (selectedImageForMetadata === null) {
+      setErrors(prev => ({ ...prev, metadata: 'Please select an image to extract metadata from' }));
+      return;
+    }
+
+    setExtractingMetadata(true);
+    setErrors(prev => ({ ...prev, metadata: undefined }));
+
+    try {
+      const idToken = await getIdTokenClaims();
+      setAuthToken(idToken.__raw);
+
+      // Get the image URL - use existing image path for uploaded images
+      const existingCount = existingImages.length;
+      let imageUrl;
+
+      if (selectedImageForMetadata < existingCount) {
+        // Use existing image path from server
+        imageUrl = existingImages[selectedImageForMetadata];
+      } else {
+        // For newly uploaded images, we need to alert the user they must save first
+        setErrors(prev => ({
+          ...prev,
+          metadata: 'Please save the order first to extract metadata from newly uploaded images'
+        }));
+        setExtractingMetadata(false);
+        return;
+      }
+
+      const response = await ordersApi.extractMetadata(imageUrl);
+      const metadata = response.data.data.metadata;
+
+      // For limited roles (Artist, Lead Artist, Production Tech), append to internal_notes
+      // For other roles, append to description field
+      if (isLimitedRole) {
+        setFormData(prev => ({
+          ...prev,
+          internal_notes: prev.internal_notes
+            ? `${prev.internal_notes}\n\nAI Metadata:\n${metadata}`
+            : `AI Metadata:\n${metadata}`
+        }));
+      } else {
+        setFormData(prev => ({
+          ...prev,
+          description: prev.description
+            ? `${prev.description}\n\n${metadata}`
+            : metadata
+        }));
+      }
+
+      setSelectedImageForMetadata(null); // Clear selection after extraction
+    } catch (error) {
+      console.error('Failed to extract metadata:', error);
+      setErrors(prev => ({
+        ...prev,
+        metadata: error.response?.data?.message || 'Failed to extract metadata from image'
+      }));
+    } finally {
+      setExtractingMetadata(false);
+    }
   };
 
   const validateForm = () => {
@@ -406,17 +470,52 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
                     {imagePreviews.map((preview, index) => {
                       const isExistingImage = index < existingImages.length;
                       const canRemove = !isLimitedRole || !isExistingImage;
+                      const isSelected = selectedImageForMetadata === index;
                       return (
                         <div key={index} style={{ position: 'relative', display: 'inline-block' }}>
                           <img
                             src={preview}
                             alt={`Order preview ${index + 1}`}
-                            style={{ width: '100px', height: '100px', borderRadius: '6px', objectFit: 'cover', border: '1px solid #e5e7eb' }}
+                            onClick={() => setSelectedImageForMetadata(isSelected ? null : index)}
+                            style={{
+                              width: '100px',
+                              height: '100px',
+                              borderRadius: '6px',
+                              objectFit: 'cover',
+                              border: isSelected ? '3px solid #722F37' : '1px solid #e5e7eb',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s'
+                            }}
+                            title="Click to select for metadata extraction"
                           />
+                          {isSelected && (
+                            <div
+                              style={{
+                                position: 'absolute',
+                                top: '4px',
+                                left: '4px',
+                                background: '#722F37',
+                                color: 'white',
+                                borderRadius: '50%',
+                                width: '20px',
+                                height: '20px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '12px',
+                                fontWeight: 'bold'
+                              }}
+                            >
+                              ✓
+                            </div>
+                          )}
                           {canRemove && (
                             <button
                               type="button"
-                              onClick={() => removeImage(index)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeImage(index);
+                              }}
                               style={{
                                 position: 'absolute',
                                 top: '-8px',
@@ -432,7 +531,8 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
                                 lineHeight: '1',
                                 display: 'flex',
                                 alignItems: 'center',
-                                justifyContent: 'center'
+                                justifyContent: 'center',
+                                zIndex: 10
                               }}
                             >
                               &times;
@@ -475,6 +575,42 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
                 )}
               </div>
               {errors.image && <span className="error-message">{errors.image}</span>}
+
+              {/* Metadata Extraction Section for Artists */}
+              {imagePreviews.length > 0 && existingImages.length > 0 && (
+                <div style={{ marginTop: '12px', padding: '12px', background: '#FDF2F4', borderRadius: '6px', border: '1px solid #F4C2CC' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                    <div style={{ fontSize: '0.85rem', color: '#722F37' }}>
+                      {selectedImageForMetadata !== null
+                        ? `Image ${selectedImageForMetadata + 1} selected`
+                        : 'Click image to extract metadata'}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleExtractMetadata}
+                      disabled={extractingMetadata || selectedImageForMetadata === null || selectedImageForMetadata >= existingImages.length}
+                      style={{
+                        padding: '8px 16px',
+                        background: selectedImageForMetadata !== null && selectedImageForMetadata < existingImages.length ? '#722F37' : '#d1d5db',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: selectedImageForMetadata !== null && selectedImageForMetadata < existingImages.length ? 'pointer' : 'not-allowed',
+                        fontSize: '0.875rem',
+                        fontWeight: '600',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {extractingMetadata ? 'Extracting...' : 'Extract Metadata'}
+                    </button>
+                  </div>
+                  {errors.metadata && (
+                    <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#dc2626' }}>
+                      {errors.metadata}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Internal Notes - For team communication */}
@@ -502,6 +638,7 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
             {permissions?.role === 'Lead Artist' && (
               <div className="form-group">
                 <label htmlFor="assigned_artist_id">Assign to Artist</label>
+                {console.log('🎨 Rendering dropdown - assignableUsers:', assignableUsers)}
                 <select
                   id="assigned_artist_id"
                   name="assigned_artist_id"
@@ -516,6 +653,7 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
                   }}
                 >
                   <option value="">-- Not Assigned --</option>
+                  {assignableUsers.length === 0 && console.log('⚠️ assignableUsers is EMPTY at render time!')}
                   {assignableUsers.map(user => (
                     <option key={user.id} value={user.id}>
                       {user.name}
@@ -680,17 +818,52 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
                   {imagePreviews.map((preview, index) => {
                     const isExistingImage = index < existingImages.length;
                     const canRemove = !isLimitedRole || !isExistingImage;
+                    const isSelected = selectedImageForMetadata === index;
                     return (
                       <div key={index} style={{ position: 'relative', display: 'inline-block' }}>
                         <img
                           src={preview}
                           alt={`Order preview ${index + 1}`}
-                          style={{ width: '100px', height: '100px', borderRadius: '6px', objectFit: 'cover', border: '1px solid #e5e7eb' }}
+                          onClick={() => setSelectedImageForMetadata(isSelected ? null : index)}
+                          style={{
+                            width: '100px',
+                            height: '100px',
+                            borderRadius: '6px',
+                            objectFit: 'cover',
+                            border: isSelected ? '3px solid #722F37' : '1px solid #e5e7eb',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                          }}
+                          title="Click to select for metadata extraction"
                         />
+                        {isSelected && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              top: '4px',
+                              left: '4px',
+                              background: '#722F37',
+                              color: 'white',
+                              borderRadius: '50%',
+                              width: '20px',
+                              height: '20px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '12px',
+                              fontWeight: 'bold'
+                            }}
+                          >
+                            ✓
+                          </div>
+                        )}
                         {canRemove && (
                           <button
                             type="button"
-                            onClick={() => removeImage(index)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeImage(index);
+                            }}
                             style={{
                               position: 'absolute',
                               top: '-8px',
@@ -706,7 +879,8 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
                               lineHeight: '1',
                               display: 'flex',
                               alignItems: 'center',
-                              justifyContent: 'center'
+                              justifyContent: 'center',
+                              zIndex: 10
                             }}
                           >
                             &times;
@@ -749,6 +923,47 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
               )}
             </div>
             {errors.image && <span className="error-message">{errors.image}</span>}
+
+            {/* Metadata Extraction Section */}
+            {imagePreviews.length > 0 && existingImages.length > 0 && (
+              <div style={{ marginTop: '12px', padding: '12px', background: '#FDF2F4', borderRadius: '6px', border: '1px solid #F4C2CC' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                  <div style={{ fontSize: '0.85rem', color: '#722F37' }}>
+                    {selectedImageForMetadata !== null
+                      ? `Image ${selectedImageForMetadata + 1} selected for metadata extraction`
+                      : 'Click on an image to select it for AI metadata extraction'}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleExtractMetadata}
+                    disabled={extractingMetadata || selectedImageForMetadata === null || selectedImageForMetadata >= existingImages.length}
+                    style={{
+                      padding: '8px 16px',
+                      background: selectedImageForMetadata !== null && selectedImageForMetadata < existingImages.length ? '#722F37' : '#d1d5db',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: selectedImageForMetadata !== null && selectedImageForMetadata < existingImages.length ? 'pointer' : 'not-allowed',
+                      fontSize: '0.875rem',
+                      fontWeight: '600',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {extractingMetadata ? 'Extracting...' : 'Extract Metadata'}
+                  </button>
+                </div>
+                {errors.metadata && (
+                  <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#dc2626' }}>
+                    {errors.metadata}
+                  </div>
+                )}
+                {selectedImageForMetadata !== null && selectedImageForMetadata >= existingImages.length && (
+                  <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#d97706' }}>
+                    Note: Save the order first to extract metadata from newly uploaded images
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Figures and Pricing */}

@@ -63,6 +63,11 @@ export const usersApi = {
   reactivate: (auth0UserId) => api.post(`/users/${encodeURIComponent(auth0UserId)}/reactivate`)
 };
 
+// Assignments API
+export const assignmentsApi = {
+  getAvailableUsers: () => api.get('/assignments/available-users')
+};
+
 // Orders API
 export const ordersApi = {
   getAll: (params) => api.get('/orders', { params }),
@@ -77,7 +82,9 @@ export const ordersApi = {
   }),
   updateWithImage: (id, formData) => api.put(`/orders/${id}`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' }
-  })
+  }),
+  // Extract metadata from image using AI
+  extractMetadata: (imageUrl) => api.post('/orders/extract-metadata', { imageUrl })
 };
 
 // Companies API
@@ -139,7 +146,12 @@ export const modulesApi = {
   systemConfig: {
     getModule: () => api.get('/modules/system-config'),
     getSettings: () => api.get('/modules/system-config/settings'),
-    updateSettings: (data) => api.put('/modules/system-config/settings', data)
+    updateSettings: (data) => api.put('/modules/system-config/settings', data),
+    // Product/SKU Management
+    getProducts: (params) => api.get('/modules/system-config/products', { params }),
+    createProduct: (data) => api.post('/modules/system-config/products', data),
+    updateProduct: (id, data) => api.put(`/modules/system-config/products/${id}`, data),
+    deleteProduct: (id) => api.delete(`/modules/system-config/products/${id}`)
   }
 };
 

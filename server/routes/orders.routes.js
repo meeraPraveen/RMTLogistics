@@ -11,6 +11,14 @@ import {
 import { getCompanyById } from '../services/company.service.js';
 import { uploadOrderImage } from '../config/upload.config.js';
 import { requireRole } from '../middleware/rbac.middleware.js';
+import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
@@ -561,6 +569,137 @@ router.delete('/:id', requireRole(['Admin', 'SuperAdmin', 'B2B User']), async (r
     res.status(500).json({
       success: false,
       error: 'Failed to delete order',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * @route   POST /api/orders/extract-metadata
+ * @desc    Extract metadata from an order image using AI
+ * @access  Private (Artist, Lead Artist, Admin, SuperAdmin, B2B User)
+ */
+router.post('/extract-metadata', requireRole(['Artist', 'Lead Artist', 'Admin', 'SuperAdmin', 'B2B User']), async (req, res) => {
+  try {
+    console.log('📸 Extract metadata endpoint called');
+    console.log('Request body:', req.body);
+
+    const { imageUrl } = req.body;
+
+    if (!imageUrl) {
+      console.log('❌ No imageUrl provided');
+      return res.status(400).json({
+        success: false,
+        error: 'Image URL is required'
+      });
+    }
+
+    console.log('🔍 Processing image:', imageUrl);
+
+    // Read the image file from the server
+    const relativePath = imageUrl.replace(/^\/uploads\//, '');
+    const imagePath = path.join(__dirname, '../../uploads', relativePath);
+
+    if (!fs.existsSync(imagePath)) {
+      return res.status(404).json({
+        success: false,
+        error: 'Image file not found on server'
+      });
+    }
+
+    // Read and encode image as base64
+    const imageBuffer = fs.readFileSync(imagePath);
+    const base64Image = imageBuffer.toString('base64');
+
+    // Determine media type from file extension
+    const ext = path.extname(imagePath).toLowerCase();
+    const mediaTypeMap = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp'
+    };
+    const mediaType = mediaTypeMap[ext] || 'image/jpeg';
+
+    const prompt = `Analyze this image and extract the following metadata for creating a custom 3D figurine. Provide a concise, structured response:
+
+1. Subject Type: Identify if the subject(s) are human, animal, bird, or other
+2. Number of Subjects: Count how many subjects are in the image
+3. Body Coverage: Determine if it shows full body, 3/4 body, half body, or just face/head
+4. Unclear Areas: Note any parts of the body or details that are unclear, obscured, or cut off from view
+
+Format your response as a brief description suitable for an order description field. Be specific and concise.`;
+
+    let metadata;
+    const aiProvider = process.env.AI_PROVIDER || 'gemini';
+
+    if (aiProvider === 'gemini') {
+      // Use Google Gemini
+      console.log('🤖 Using Gemini AI provider');
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+
+      const imagePart = {
+        inlineData: {
+          data: base64Image,
+          mimeType: mediaType
+        }
+      };
+
+      console.log('📤 Calling Gemini API...');
+      const result = await model.generateContent([prompt, imagePart]);
+      const response = await result.response;
+      metadata = response.text();
+      console.log('✅ Received metadata from Gemini');
+    } else if (aiProvider === 'anthropic') {
+      // Use Anthropic Claude
+      const anthropic = new Anthropic({
+        apiKey: process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY
+      });
+
+      const message = await anthropic.messages.create({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 1024,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: mediaType,
+                  data: base64Image
+                }
+              },
+              {
+                type: 'text',
+                text: prompt
+              }
+            ]
+          }
+        ]
+      });
+
+      metadata = message.content[0].text;
+    } else {
+      throw new Error(`Unsupported AI provider: ${aiProvider}. Use 'gemini' or 'anthropic'.`);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        metadata,
+        imageUrl,
+        provider: aiProvider
+      }
+    });
+  } catch (error) {
+    console.error('Error extracting metadata:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to extract metadata',
       message: error.message
     });
   }
