@@ -1561,7 +1561,7 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
             <div className="checkbox-group">
               <label>
                 <input type="checkbox" name="has_background" checked={formData.has_background} onChange={handleChange} />
-                <span>Has Background</span>
+                <span>Keep Background</span>
               </label>
             </div>
             <div className="form-group" style={{ marginBottom: 0 }}>
