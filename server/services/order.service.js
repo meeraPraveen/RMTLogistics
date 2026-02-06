@@ -68,7 +68,7 @@ export const createOrder = async (orderData, createdBy) => {
       base_type,
       dimensions,
       has_background,
-      has_text,
+      custom_engraving,
       unit_rate,
       total_amount,
       image_name,
@@ -96,7 +96,7 @@ export const createOrder = async (orderData, createdBy) => {
         internal_order_id, order_type, platform_order_id, order_item_id,
         company_id, customer_email, shipping_address, description, num_figures,
         sku, product_id, shape, size, orientation, base_type, dimensions,
-        has_background, has_text, unit_rate, total_amount,
+        has_background, custom_engraving, unit_rate, total_amount,
         image_name, image_path, comments, date_submitted, created_by
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
@@ -107,7 +107,7 @@ export const createOrder = async (orderData, createdBy) => {
         internal_order_id, order_type, platform_order_id, order_item_id,
         company_id, customer_email, shipping_address, description, num_figures,
         sku, product_id, shape, size, orientation, base_type, dimensions,
-        has_background, has_text, finalUnitRate, total_amount,
+        has_background, custom_engraving, finalUnitRate, total_amount,
         image_name, image_path, comments, createdBy
       ]
     );
@@ -326,10 +326,10 @@ export const updateOrder = async (orderId, updates) => {
     const allowedFields = [
       'platform_order_id', 'order_item_id', 'customer_email', 'shipping_address',
       'description', 'num_figures', 'sku', 'product_id', 'shape', 'size',
-      'orientation', 'base_type', 'dimensions', 'has_background', 'has_text',
+      'orientation', 'base_type', 'dimensions', 'has_background', 'custom_engraving',
       'unit_rate', 'total_amount', 'status', 'assigned_artist_id', 'assigned_qc_id',
       'comments', 'internal_notes', 'feedback', 'date_completed', 'date_shipped',
-      'image_name', 'image_path'
+      'image_name', 'image_path', 'model_path', 'ready_for_print_reached'
     ];
 
     const setters = [];
@@ -439,7 +439,7 @@ export const getOrderStats = async (options = {}) => {
         COUNT(CASE WHEN status = 'Pending' THEN 1 END) as pending,
         COUNT(CASE WHEN status = 'Processing' THEN 1 END) as processing,
         COUNT(CASE WHEN status = 'Ready to Print' THEN 1 END) as ready_to_print,
-        COUNT(CASE WHEN status = 'In Progress' THEN 1 END) as in_progress,
+        COUNT(CASE WHEN status = 'Ready For QC' THEN 1 END) as ready_for_qc,
         COUNT(CASE WHEN status = 'Completed' THEN 1 END) as completed,
         COUNT(CASE WHEN status = 'Shipped' THEN 1 END) as shipped,
         COALESCE(SUM(total_amount), 0) as total_revenue

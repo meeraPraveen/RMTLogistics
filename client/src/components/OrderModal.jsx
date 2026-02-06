@@ -34,7 +34,7 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
     orientation: '',
     base_type: '',
     has_background: false,
-    has_text: false,
+    custom_engraving: '',
     complementary_items: '',
     unit_rate: '',
     total_amount: '',
@@ -98,7 +98,7 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
       orientation: orderData.orientation || '',
       base_type: orderData.base_type || '',
       has_background: orderData.has_background || false,
-      has_text: orderData.has_text || false,
+      custom_engraving: orderData.custom_engraving || orderData.has_text || '',
       complementary_items: orderData.complementary_items || '',
       unit_rate: orderData.unit_rate?.toString() || '',
       total_amount: orderData.total_amount?.toString() || '',
@@ -183,7 +183,7 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
       orientation: '',
       base_type: '',
       has_background: false,
-      has_text: false,
+      custom_engraving: '',
       complementary_items: '',
       unit_rate: '',
       total_amount: '',
@@ -593,7 +593,7 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
         orientation: formData.orientation || null,
         base_type: formData.base_type || null,
         has_background: formData.has_background,
-        has_text: formData.has_text,
+        custom_engraving: formData.custom_engraving || null,
         complementary_items: formData.complementary_items || null,
         unit_rate: formData.unit_rate ? parseFloat(formData.unit_rate) : null,
         total_amount: formData.total_amount ? parseFloat(formData.total_amount) : null,
@@ -642,6 +642,11 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
                 <div><strong>Status:</strong> {order?.status}</div>
                 <div><strong>SKU:</strong> {order?.sku || '-'}</div>
                 {order?.description && <div style={{ gridColumn: '1 / -1' }}><strong>Description:</strong> {order.description}</div>}
+                {(order?.custom_engraving || formData.custom_engraving) && (
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <strong>Custom Engraving:</strong> {order?.custom_engraving || formData.custom_engraving}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1552,18 +1557,29 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
           </div>
 
           {/* Options */}
-          <div style={{ display: 'flex', gap: '20px', marginBottom: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: '16px', marginBottom: '16px', alignItems: 'center' }}>
             <div className="checkbox-group">
               <label>
                 <input type="checkbox" name="has_background" checked={formData.has_background} onChange={handleChange} />
                 <span>Has Background</span>
               </label>
             </div>
-            <div className="checkbox-group">
-              <label>
-                <input type="checkbox" name="has_text" checked={formData.has_text} onChange={handleChange} />
-                <span>Has Text</span>
-              </label>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label htmlFor="custom_engraving" style={{ marginBottom: '6px', display: 'block' }}>Custom Engraving</label>
+              <input
+                type="text"
+                id="custom_engraving"
+                name="custom_engraving"
+                value={formData.custom_engraving}
+                onChange={handleChange}
+                placeholder="Enter custom engraving text..."
+                disabled={isLimitedRole}
+                style={{
+                  width: '100%',
+                  backgroundColor: isLimitedRole ? '#f3f4f6' : 'white',
+                  cursor: isLimitedRole ? 'not-allowed' : 'text'
+                }}
+              />
             </div>
           </div>
 

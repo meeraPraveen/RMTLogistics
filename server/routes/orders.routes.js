@@ -333,7 +333,8 @@ router.post('/', requireRole(['Admin', 'SuperAdmin', 'B2B User']), prepareNewOrd
         : req.body.shipping_address,
       // Parse boolean values
       has_background: req.body.has_background === 'true' || req.body.has_background === true,
-      has_text: req.body.has_text === 'true' || req.body.has_text === true,
+      // Custom engraving text
+      custom_engraving: req.body.custom_engraving || null,
       // Parse numeric values
       unit_rate: req.body.unit_rate ? parseFloat(req.body.unit_rate) : null,
       total_amount: req.body.total_amount ? parseFloat(req.body.total_amount) : null,
@@ -506,8 +507,10 @@ router.put('/:id', requireRole(['Artist', 'Lead Artist', 'Admin', 'SuperAdmin', 
       if (req.body.has_background !== undefined) {
         updates.has_background = req.body.has_background === 'true' || req.body.has_background === true;
       }
-      if (req.body.has_text !== undefined) {
-        updates.has_text = req.body.has_text === 'true' || req.body.has_text === true;
+
+      // Custom engraving text
+      if (req.body.custom_engraving !== undefined) {
+        updates.custom_engraving = req.body.custom_engraving || null;
       }
 
       // Only parse numeric values if they're provided
