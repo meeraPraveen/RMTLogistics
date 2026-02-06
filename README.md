@@ -121,6 +121,9 @@ client/src/
 - PostgreSQL (v15 or higher)
 - Auth0 account (free tier works)
 - npm or yarn
+- Python 3.8+ (for background removal feature)
+  - Required packages: `rembg`, `Pillow`
+  - Installation: `pip install -r scripts/requirements.txt`
 
 ### 1. Clone and Install
 
@@ -424,9 +427,33 @@ WHERE role = 'Artist' AND module = 'order_management';
 - CRUD-level permission granularity
 
 ### 5. Order Status Workflow
+
+The system implements an automated workflow with the following stages:
+
 ```
-Pending → Processing → Ready to Print → In Progress → Completed → Shipped
+Pending (default)
+   ↓ (auto: when artist assigned)
+Processing
+   ↓ (auto: when 3D model uploaded)
+Ready For QC
+   ↓ (QC approval - Admin/SuperAdmin)
+Ready for Print
+   ↓ (manual: after printing)
+Ready For QC (second QC check)
+   ↓ (QC approval - Admin/SuperAdmin)
+Completed
+   ↓ (manual)
+Shipped
 ```
+
+**Automatic Transitions:**
+- **Pending → Processing**: Triggered when an artist is assigned to the order
+- **Processing → Ready For QC**: Triggered when a 3D model file is uploaded
+
+**QC Approval:**
+- Admin/SuperAdmin can approve QC using the "✓ QC" button
+- First approval: Ready For QC → Ready for Print
+- Second approval: Ready For QC → Completed (after manual status change post-printing)
 
 ## Troubleshooting
 
@@ -560,6 +587,28 @@ node scripts/check-db-user.js <email>
 node scripts/check-auth0-user.js <email>
 node scripts/force-sync-role.js <email>
 ```
+
+## Third-Party Libraries & License Attribution
+
+This project uses the following open-source libraries:
+
+### Image Processing
+- **[rembg](https://github.com/danielgatis/rembg)** by Daniel Gatis
+  - License: MIT License
+  - Purpose: AI-powered background removal from images
+  - Used in: Background removal feature for order images
+
+- **[Pillow (PIL Fork)](https://python-pillow.org/)**
+  - License: HPND License (Historical Permission Notice and Disclaimer)
+  - Purpose: Python Imaging Library for image processing
+  - Used in: Image manipulation and processing
+
+### AI Models
+- **U2-Net** (used by rembg)
+  - License: Apache License 2.0
+  - Automatically downloaded and used by the rembg library
+
+All third-party libraries are used in compliance with their respective licenses. For full license texts, please refer to the individual library repositories.
 
 ## License
 
