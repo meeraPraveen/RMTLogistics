@@ -10,6 +10,8 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
   const isEditMode = !!order;
   const isArtist = ['Artist', 'Lead Artist'].includes(permissions?.role);
   const isLimitedRole = ['Artist', 'Lead Artist', 'Production Tech'].includes(permissions?.role);
+  const isAdminOrSuperAdmin = ['Admin', 'SuperAdmin'].includes(permissions?.role);
+  const isB2BUser = permissions?.role === 'B2B User';
 
   const [formData, setFormData] = useState({
     order_type: 'Amazon',
@@ -33,6 +35,7 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
     base_type: '',
     has_background: false,
     has_text: false,
+    complementary_items: '',
     unit_rate: '',
     total_amount: '',
     comments: '',
@@ -53,7 +56,13 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
   const [assignableUsers, setAssignableUsers] = useState([]); // Users that can be assigned to orders
   const [selectedImageForMetadata, setSelectedImageForMetadata] = useState(null); // Selected image for metadata extraction
   const [extractingMetadata, setExtractingMetadata] = useState(false); // Loading state for metadata extraction
+  const [selectedImageForBackground, setSelectedImageForBackground] = useState(null); // Selected image for background removal
+  const [removingBackground, setRemovingBackground] = useState(null); // Track which image is having BG removed (by index)
+  const [modelFiles, setModelFiles] = useState([]); // New 3D model files to upload
+  const [modelPreviews, setModelPreviews] = useState([]); // Model file info (name, size)
+  const [existingModels, setExistingModels] = useState([]); // Existing model paths from server
   const MAX_IMAGES = 5;
+  const MAX_MODELS = 3;
 
   useEffect(() => {
     if (isOpen && permissions) {
@@ -69,10 +78,10 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
   const populateFormFromOrder = (orderData) => {
     const shippingAddress = orderData.shipping_address || {};
     setFormData({
-      order_type: orderData.order_type || 'Amazon',
+      order_type: permissions?.role === 'B2B User' ? 'B2B' : (orderData.order_type || 'Amazon'),
       platform_order_id: orderData.platform_order_id || '',
       order_item_id: orderData.order_item_id || '',
-      company_id: orderData.company_id || '',
+      company_id: permissions?.role === 'B2B User' ? (permissions?.company_id || orderData.company_id || '') : (orderData.company_id || ''),
       customer_email: orderData.customer_email || '',
       shipping_name: shippingAddress.name || '',
       shipping_line1: shippingAddress.line1 || '',
@@ -90,6 +99,7 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
       base_type: orderData.base_type || '',
       has_background: orderData.has_background || false,
       has_text: orderData.has_text || false,
+      complementary_items: orderData.complementary_items || '',
       unit_rate: orderData.unit_rate?.toString() || '',
       total_amount: orderData.total_amount?.toString() || '',
       comments: orderData.comments || '',
@@ -100,6 +110,7 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
     });
     setErrors({});
     setImageFiles([]);
+    setModelFiles([]);
     // Set existing image previews if order has images
     if (orderData.image_path) {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -119,6 +130,30 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
       setExistingImages([]);
       setImagePreviews([]);
     }
+    // Set existing model previews if order has models
+    if (orderData.model_path) {
+      try {
+        const paths = typeof orderData.model_path === 'string' && orderData.model_path.startsWith('[')
+          ? JSON.parse(orderData.model_path)
+          : [orderData.model_path];
+        setExistingModels(paths);
+        setModelPreviews(paths.map(p => ({
+          name: p.split('/').pop(),
+          size: '-',
+          type: '.' + p.split('.').pop()
+        })));
+      } catch (e) {
+        setExistingModels([orderData.model_path]);
+        setModelPreviews([{
+          name: orderData.model_path.split('/').pop(),
+          size: '-',
+          type: '.' + orderData.model_path.split('.').pop()
+        }]);
+      }
+    } else {
+      setExistingModels([]);
+      setModelPreviews([]);
+    }
     // Find and set the selected product if SKU exists
     if (orderData.sku && catalog.length > 0) {
       const product = catalog.find(p => p.sku === orderData.sku);
@@ -128,10 +163,10 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
 
   const resetForm = () => {
     setFormData({
-      order_type: 'Amazon',
+      order_type: permissions?.role === 'B2B User' ? 'B2B' : 'Amazon',
       platform_order_id: '',
       order_item_id: '',
-      company_id: '',
+      company_id: permissions?.role === 'B2B User' ? (permissions?.company_id || '') : '',
       customer_email: '',
       shipping_name: '',
       shipping_line1: '',
@@ -149,6 +184,7 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
       base_type: '',
       has_background: false,
       has_text: false,
+      complementary_items: '',
       unit_rate: '',
       total_amount: '',
       comments: '',
@@ -161,6 +197,9 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
     setImageFiles([]);
     setImagePreviews([]);
     setExistingImages([]);
+    setModelFiles([]);
+    setModelPreviews([]);
+    setExistingModels([]);
   };
 
   const loadCatalogAndCompanies = async () => {
@@ -306,6 +345,58 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
     }
   };
 
+  const handleModelChange = (e) => {
+    const files = Array.from(e.target.files);
+    const allowedTypes = ['.glb', '.lpc', '.obj'];
+    const currentTotal = modelPreviews.length;
+    const availableSlots = MAX_MODELS - currentTotal;
+
+    if (files.length > availableSlots) {
+      setErrors(prev => ({ ...prev, model: `You can only add ${availableSlots} more model(s). Maximum is ${MAX_MODELS}.` }));
+      return;
+    }
+
+    const validFiles = [];
+    const newPreviews = [];
+
+    for (const file of files) {
+      const extension = '.' + file.name.split('.').pop().toLowerCase();
+      if (!allowedTypes.includes(extension)) {
+        setErrors(prev => ({ ...prev, model: 'Only GLB, LPC, and OBJ files are allowed' }));
+        return;
+      }
+      if (file.size > 50 * 1024 * 1024) {
+        setErrors(prev => ({ ...prev, model: 'Each file size cannot exceed 50MB' }));
+        return;
+      }
+      validFiles.push(file);
+      newPreviews.push({
+        name: file.name,
+        size: (file.size / (1024 * 1024)).toFixed(2), // Size in MB
+        type: extension
+      });
+    }
+
+    setModelFiles(prev => [...prev, ...validFiles]);
+    setModelPreviews(prev => [...prev, ...newPreviews]);
+    setErrors(prev => ({ ...prev, model: undefined }));
+    e.target.value = '';
+  };
+
+  const removeModel = (index) => {
+    const existingCount = existingModels.length;
+
+    if (index < existingCount) {
+      // Removing an existing model (from server)
+      setExistingModels(prev => prev.filter((_, i) => i !== index));
+    } else {
+      // Removing a newly added model
+      const newFileIndex = index - existingCount;
+      setModelFiles(prev => prev.filter((_, i) => i !== newFileIndex));
+    }
+    setModelPreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleExtractMetadata = async () => {
     if (selectedImageForMetadata === null) {
       setErrors(prev => ({ ...prev, metadata: 'Please select an image to extract metadata from' }));
@@ -369,10 +460,102 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
     }
   };
 
+  const handleRemoveBackground = async (imageIndex) => {
+    setRemovingBackground(imageIndex);
+    setErrors(prev => ({ ...prev, background: null }));
+
+    try {
+      const idToken = await getIdTokenClaims();
+      setAuthToken(idToken.__raw);
+
+      // Get the image URL - only works with existing images (already saved to server)
+      const existingCount = existingImages.length;
+      let imageUrl;
+
+      if (imageIndex < existingCount) {
+        // Use existing image path from server
+        imageUrl = existingImages[imageIndex];
+      } else {
+        // For newly uploaded images, user must save first
+        setErrors(prev => ({
+          ...prev,
+          background: 'Please save the order first to remove background from newly uploaded images'
+        }));
+        setRemovingBackground(null);
+        return;
+      }
+
+      const response = await ordersApi.removeBackground(imageUrl);
+      const processedUrl = response.data.data.processedUrl;
+
+      // Add the background-removed version as a NEW image (don't replace the original)
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const newPreview = `${apiUrl}${processedUrl}`;
+
+      // Check if we've reached the maximum number of images
+      if (imagePreviews.length >= MAX_IMAGES) {
+        setErrors(prev => ({
+          ...prev,
+          background: `Maximum ${MAX_IMAGES} images allowed. Cannot add background-removed version.`
+        }));
+        setRemovingBackground(null);
+        return;
+      }
+
+      // Add the new background-removed image to the arrays
+      setExistingImages(prev => [...prev, processedUrl]);
+      setImagePreviews(prev => [...prev, newPreview]);
+
+    } catch (error) {
+      console.error('Failed to remove background:', error);
+      setErrors(prev => ({
+        ...prev,
+        background: error.response?.data?.message || 'Failed to remove background from image'
+      }));
+    } finally {
+      setRemovingBackground(null);
+    }
+  };
+
+  const handleDownloadImage = (imageIndex) => {
+    const imageUrl = imagePreviews[imageIndex];
+    if (!imageUrl) return;
+
+    // Extract file extension from the original path
+    const originalPath = existingImages[imageIndex] || '';
+    const extension = originalPath.split('.').pop().split('?')[0] || 'jpg';
+
+    // Fetch the image as a blob to properly download it
+    fetch(imageUrl)
+      .then(response => response.blob())
+      .then(blob => {
+        // Create a blob URL
+        const blobUrl = URL.createObjectURL(blob);
+
+        // Create a temporary anchor element
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = `order-image-${order?.id || 'new'}-${imageIndex + 1}.${extension}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // Clean up the blob URL
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+      })
+      .catch(error => {
+        console.error('Failed to download image:', error);
+        alert('Failed to download image. Please try again.');
+      });
+  };
+
   const validateForm = () => {
     const newErrors = {};
-    if (!formData.order_type) newErrors.order_type = 'Order type is required';
-    if (!formData.customer_email.trim()) newErrors.customer_email = 'Customer email is required';
+    // B2B Users don't need to validate order_type (always B2B) or customer_email
+    if (permissions?.role !== 'B2B User') {
+      if (!formData.order_type) newErrors.order_type = 'Order type is required';
+      if (!formData.customer_email.trim()) newErrors.customer_email = 'Customer email is required';
+    }
     if (formData.order_type === 'B2B' && !formData.company_id) newErrors.company_id = 'Company is required for B2B orders';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -411,6 +594,7 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
         base_type: formData.base_type || null,
         has_background: formData.has_background,
         has_text: formData.has_text,
+        complementary_items: formData.complementary_items || null,
         unit_rate: formData.unit_rate ? parseFloat(formData.unit_rate) : null,
         total_amount: formData.total_amount ? parseFloat(formData.total_amount) : null,
         comments: formData.comments || null,
@@ -420,7 +604,7 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
         assigned_qc_id: formData.assigned_qc_id ? parseInt(formData.assigned_qc_id) : null
       };
 
-      await onSave(orderData, isEditMode ? order.id : null, imageFiles, existingImages);
+      await onSave(orderData, isEditMode ? order.id : null, imageFiles, existingImages, modelFiles, existingModels);
       onClose();
     } catch (err) {
       setErrors({ submit: err.response?.data?.message || (isEditMode ? 'Failed to update order' : 'Failed to create order') });
@@ -476,19 +660,22 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
                           <img
                             src={preview}
                             alt={`Order preview ${index + 1}`}
-                            onClick={() => setSelectedImageForMetadata(isSelected ? null : index)}
+                            onClick={isAdminOrSuperAdmin ? () => {
+                              setSelectedImageForMetadata(isSelected ? null : index);
+                              setSelectedImageForBackground(isSelected ? null : index);
+                            } : undefined}
                             style={{
                               width: '100px',
                               height: '100px',
                               borderRadius: '6px',
                               objectFit: 'cover',
                               border: isSelected ? '3px solid #722F37' : '1px solid #e5e7eb',
-                              cursor: 'pointer',
+                              cursor: isAdminOrSuperAdmin ? 'pointer' : 'default',
                               transition: 'all 0.2s'
                             }}
-                            title="Click to select for metadata extraction"
+                            title={isAdminOrSuperAdmin ? "Click to select for AI processing" : ""}
                           />
-                          {isSelected && (
+                          {isSelected && isAdminOrSuperAdmin && (
                             <div
                               style={{
                                 position: 'absolute',
@@ -538,6 +725,37 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
                               &times;
                             </button>
                           )}
+                          {isExistingImage && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDownloadImage(index);
+                              }}
+                              style={{
+                                position: 'absolute',
+                                top: '4px',
+                                right: '4px',
+                                background: '#10b981',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '50%',
+                                width: '24px',
+                                height: '24px',
+                                cursor: 'pointer',
+                                fontSize: '14px',
+                                fontWeight: 'bold',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                opacity: 0.95,
+                                zIndex: 10
+                              }}
+                              title="Download this image"
+                            >
+                              ↓
+                            </button>
+                          )}
                         </div>
                       );
                     })}
@@ -577,7 +795,7 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
               {errors.image && <span className="error-message">{errors.image}</span>}
 
               {/* Metadata Extraction Section for Artists */}
-              {imagePreviews.length > 0 && existingImages.length > 0 && (
+              {imagePreviews.length > 0 && existingImages.length > 0 && isAdminOrSuperAdmin && (
                 <div style={{ marginTop: '12px', padding: '12px', background: '#FDF2F4', borderRadius: '6px', border: '1px solid #F4C2CC' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
                     <div style={{ fontSize: '0.85rem', color: '#722F37' }}>
@@ -611,6 +829,152 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
                   )}
                 </div>
               )}
+
+              {/* Background Removal Section for Admin/SuperAdmin */}
+              {imagePreviews.length > 0 && existingImages.length > 0 && isAdminOrSuperAdmin && (
+                <div style={{ marginTop: '12px', padding: '12px', background: '#F0F9FF', borderRadius: '6px', border: '1px solid #BAE6FD' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                    <div style={{ fontSize: '0.85rem', color: '#0369A1' }}>
+                      {selectedImageForBackground !== null
+                        ? `Image ${selectedImageForBackground + 1} selected`
+                        : 'Click image to remove background'}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedImageForBackground !== null && selectedImageForBackground < existingImages.length) {
+                          handleRemoveBackground(selectedImageForBackground);
+                        }
+                      }}
+                      disabled={removingBackground !== null || selectedImageForBackground === null || selectedImageForBackground >= existingImages.length}
+                      style={{
+                        padding: '8px 16px',
+                        background: selectedImageForBackground !== null && selectedImageForBackground < existingImages.length && removingBackground === null ? '#0369A1' : '#d1d5db',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: selectedImageForBackground !== null && selectedImageForBackground < existingImages.length && removingBackground === null ? 'pointer' : 'not-allowed',
+                        fontSize: '0.85rem',
+                        fontWeight: '600'
+                      }}
+                    >
+                      {removingBackground !== null ? 'Processing...' : 'Remove Background'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Background Removal Error Display */}
+              {errors.background && (
+                <div style={{ marginTop: '12px', padding: '10px', background: '#fee2e2', borderRadius: '6px', border: '1px solid #fca5a5' }}>
+                  <div style={{ fontSize: '0.85rem', color: '#dc2626' }}>
+                    {errors.background}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 3D Model Upload */}
+            <div className="form-group">
+              <label>3D Model Files <span style={{ color: '#6b7280', fontWeight: 'normal' }}>({modelPreviews.length}/{MAX_MODELS})</span></label>
+              <div style={{ border: '2px dashed #d1d5db', borderRadius: '8px', padding: '16px', background: '#f9fafb' }}>
+                {modelPreviews.length > 0 && (
+                  <div style={{ marginBottom: modelPreviews.length < MAX_MODELS ? '16px' : '0' }}>
+                    {modelPreviews.map((model, index) => {
+                      const isExistingModel = index < existingModels.length;
+                      return (
+                        <div key={index} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '10px 12px',
+                          background: 'white',
+                          borderRadius: '6px',
+                          border: '1px solid #e5e7eb',
+                          marginBottom: '8px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+                            <div style={{
+                              width: '40px',
+                              height: '40px',
+                              background: '#f3f4f6',
+                              borderRadius: '6px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '1.2rem',
+                              color: '#6b7280',
+                              flexShrink: 0
+                            }}>
+                              📦
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: '0.875rem', fontWeight: '500', color: '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {model.name}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                                {model.type.toUpperCase()} {model.size !== '-' ? `• ${model.size} MB` : ''}
+                              </div>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeModel(index)}
+                            style={{
+                              background: '#ef4444',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              width: '28px',
+                              height: '28px',
+                              cursor: 'pointer',
+                              fontSize: '14px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              flexShrink: 0,
+                              marginLeft: '10px'
+                            }}
+                          >
+                            &times;
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {modelPreviews.length < MAX_MODELS && (
+                  <div style={{ textAlign: 'center' }}>
+                    <input
+                      type="file"
+                      id="models-artist"
+                      accept=".glb,.lpc,.obj"
+                      onChange={handleModelChange}
+                      multiple
+                      style={{ display: 'none' }}
+                    />
+                    <label
+                      htmlFor="models-artist"
+                      style={{
+                        cursor: 'pointer',
+                        color: '#6b7280',
+                        display: 'inline-block',
+                        padding: '12px 20px',
+                        border: '1px dashed #9ca3af',
+                        borderRadius: '6px',
+                        background: 'white'
+                      }}
+                    >
+                      <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>📦</div>
+                      <div style={{ fontSize: '0.875rem' }}>Add 3D Models</div>
+                      <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '2px' }}>
+                        GLB, LPC, OBJ (max 50MB each)
+                      </div>
+                    </label>
+                  </div>
+                )}
+              </div>
+              {errors.model && <span className="error-message">{errors.model}</span>}
             </div>
 
             {/* Internal Notes - For team communication */}
@@ -687,37 +1051,54 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
           <button className="modal-close" onClick={onClose}>&times;</button>
         </div>
         <form className="modal-form" onSubmit={handleSubmit}>
-          {/* Order Type & Status (Status only in edit mode) */}
-          <div style={{ display: 'grid', gridTemplateColumns: isEditMode ? '1fr 1fr 1fr' : '1fr 1fr', gap: '16px' }}>
-            <div className="form-group">
-              <label htmlFor="order_type">Order Type *</label>
-              <select id="order_type" name="order_type" value={formData.order_type} onChange={handleChange} className={errors.order_type ? 'error' : ''}>
-                <option value="Amazon">Amazon</option>
-                <option value="Shopify">Shopify</option>
-                <option value="Etsy">Etsy</option>
-                <option value="B2B">B2B</option>
-                <option value="Personal">Personal</option>
-              </select>
-              {errors.order_type && <span className="error-message">{errors.order_type}</span>}
-            </div>
-            {isEditMode && (
+          {/* Order Type & Status (Status only in edit mode) - Hidden for B2B Users */}
+          {!isB2BUser && (
+            <div style={{ display: 'grid', gridTemplateColumns: isEditMode ? '1fr 1fr 1fr' : '1fr 1fr', gap: '16px' }}>
               <div className="form-group">
-                <label htmlFor="status">Status</label>
-                <select id="status" name="status" value={formData.status} onChange={handleChange}>
-                  <option value="Pending">Pending</option>
-                  <option value="Processing">Processing</option>
-                  <option value="Ready to Print">Ready to Print</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Completed">Completed</option>
-                  <option value="Shipped">Shipped</option>
+                <label htmlFor="order_type">Order Type *</label>
+                <select id="order_type" name="order_type" value={formData.order_type} onChange={handleChange} className={errors.order_type ? 'error' : ''}>
+                  <option value="Amazon">Amazon</option>
+                  <option value="Shopify">Shopify</option>
+                  <option value="Etsy">Etsy</option>
+                  <option value="B2B">B2B</option>
+                  <option value="Personal">Personal</option>
                 </select>
+                {errors.order_type && <span className="error-message">{errors.order_type}</span>}
               </div>
-            )}
-            <div className="form-group">
-              <label htmlFor="platform_order_id">Platform Order ID</label>
-              <input type="text" id="platform_order_id" name="platform_order_id" value={formData.platform_order_id} onChange={handleChange} placeholder="e.g. 114-1234567-1234567" />
+              {isEditMode && (
+                <div className="form-group">
+                  <label htmlFor="status">Status</label>
+                  <select id="status" name="status" value={formData.status} onChange={handleChange}>
+                    <option value="Pending">Pending</option>
+                    <option value="Processing">Processing</option>
+                    <option value="Ready to Print">Ready to Print</option>
+                    <option value="Ready For QC">Ready For QC</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Shipped">Shipped</option>
+                  </select>
+                </div>
+              )}
+              <div className="form-group">
+                <label htmlFor="platform_order_id">Platform Order ID</label>
+                <input type="text" id="platform_order_id" name="platform_order_id" value={formData.platform_order_id} onChange={handleChange} placeholder="e.g. 114-1234567-1234567" />
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Status field for B2B Users in edit mode */}
+          {isB2BUser && isEditMode && (
+            <div className="form-group">
+              <label htmlFor="status">Status</label>
+              <select id="status" name="status" value={formData.status} onChange={handleChange}>
+                <option value="Pending">Pending</option>
+                <option value="Processing">Processing</option>
+                <option value="Ready to Print">Ready to Print</option>
+                <option value="Ready For QC">Ready For QC</option>
+                <option value="Completed">Completed</option>
+                <option value="Shipped">Shipped</option>
+              </select>
+            </div>
+          )}
 
           {/* Assignment Dropdowns (Admin/SuperAdmin/Lead Artist, Edit mode only) */}
           {isEditMode && (permissions?.role === 'Admin' || permissions?.role === 'SuperAdmin' || permissions?.role === 'Lead Artist') && (
@@ -761,8 +1142,8 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
             </div>
           )}
 
-          {/* Company (B2B only) */}
-          {formData.order_type === 'B2B' && (
+          {/* Company (B2B only - Hidden for B2B Users as they're already assigned to a company) */}
+          {formData.order_type === 'B2B' && !isB2BUser && (
             <div className="form-group">
               <label htmlFor="company_id">Company *</label>
               <select id="company_id" name="company_id" value={formData.company_id} onChange={handleChange} className={errors.company_id ? 'error' : ''}>
@@ -775,12 +1156,14 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
             </div>
           )}
 
-          {/* Customer */}
-          <div className="form-group">
-            <label htmlFor="customer_email">Customer Email *</label>
-            <input type="email" id="customer_email" name="customer_email" value={formData.customer_email} onChange={handleChange} placeholder="customer@example.com" className={errors.customer_email ? 'error' : ''} />
-            {errors.customer_email && <span className="error-message">{errors.customer_email}</span>}
-          </div>
+          {/* Customer - Hidden for B2B Users */}
+          {!isB2BUser && (
+            <div className="form-group">
+              <label htmlFor="customer_email">Customer Email *</label>
+              <input type="email" id="customer_email" name="customer_email" value={formData.customer_email} onChange={handleChange} placeholder="customer@example.com" className={errors.customer_email ? 'error' : ''} />
+              {errors.customer_email && <span className="error-message">{errors.customer_email}</span>}
+            </div>
+          )}
 
           {/* Product / SKU Selection */}
           <div className="form-group">
@@ -824,19 +1207,22 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
                         <img
                           src={preview}
                           alt={`Order preview ${index + 1}`}
-                          onClick={() => setSelectedImageForMetadata(isSelected ? null : index)}
+                          onClick={isAdminOrSuperAdmin ? () => {
+                            setSelectedImageForMetadata(isSelected ? null : index);
+                            setSelectedImageForBackground(isSelected ? null : index);
+                          } : undefined}
                           style={{
                             width: '100px',
                             height: '100px',
                             borderRadius: '6px',
                             objectFit: 'cover',
                             border: isSelected ? '3px solid #722F37' : '1px solid #e5e7eb',
-                            cursor: 'pointer',
+                            cursor: isAdminOrSuperAdmin ? 'pointer' : 'default',
                             transition: 'all 0.2s'
                           }}
-                          title="Click to select for metadata extraction"
+                          title={isAdminOrSuperAdmin ? "Click to select for AI processing" : ""}
                         />
-                        {isSelected && (
+                        {isSelected && isAdminOrSuperAdmin && (
                           <div
                             style={{
                               position: 'absolute',
@@ -886,6 +1272,37 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
                             &times;
                           </button>
                         )}
+                        {isExistingImage && isAdminOrSuperAdmin && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownloadImage(index);
+                            }}
+                            style={{
+                              position: 'absolute',
+                              top: '4px',
+                              right: '4px',
+                              background: '#10b981',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '50%',
+                              width: '24px',
+                              height: '24px',
+                              cursor: 'pointer',
+                              fontSize: '14px',
+                              fontWeight: 'bold',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              opacity: 0.95,
+                              zIndex: 10
+                            }}
+                            title="Download this image"
+                          >
+                            ↓
+                          </button>
+                        )}
                       </div>
                     );
                   })}
@@ -925,7 +1342,7 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
             {errors.image && <span className="error-message">{errors.image}</span>}
 
             {/* Metadata Extraction Section */}
-            {imagePreviews.length > 0 && existingImages.length > 0 && (
+            {imagePreviews.length > 0 && existingImages.length > 0 && isAdminOrSuperAdmin && (
               <div style={{ marginTop: '12px', padding: '12px', background: '#FDF2F4', borderRadius: '6px', border: '1px solid #F4C2CC' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
                   <div style={{ fontSize: '0.85rem', color: '#722F37' }}>
@@ -964,6 +1381,158 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
                 )}
               </div>
             )}
+
+            {/* Background Removal Section for Admin/SuperAdmin */}
+            {imagePreviews.length > 0 && existingImages.length > 0 && isAdminOrSuperAdmin && (
+              <div style={{ marginTop: '12px', padding: '12px', background: '#F0F9FF', borderRadius: '6px', border: '1px solid #BAE6FD' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                  <div style={{ fontSize: '0.85rem', color: '#0369A1' }}>
+                    {selectedImageForBackground !== null
+                      ? `Image ${selectedImageForBackground + 1} selected for background removal`
+                      : 'Click on an image to select it for background removal'}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selectedImageForBackground !== null && selectedImageForBackground < existingImages.length) {
+                        handleRemoveBackground(selectedImageForBackground);
+                      }
+                    }}
+                    disabled={removingBackground !== null || selectedImageForBackground === null || selectedImageForBackground >= existingImages.length}
+                    style={{
+                      padding: '8px 16px',
+                      background: selectedImageForBackground !== null && selectedImageForBackground < existingImages.length && removingBackground === null ? '#0369A1' : '#d1d5db',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: selectedImageForBackground !== null && selectedImageForBackground < existingImages.length && removingBackground === null ? 'pointer' : 'not-allowed',
+                      fontSize: '0.875rem',
+                      fontWeight: '600',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {removingBackground !== null ? 'Processing...' : 'Remove Background'}
+                  </button>
+                </div>
+                {selectedImageForBackground !== null && selectedImageForBackground >= existingImages.length && (
+                  <div style={{ marginTop: '8px', fontSize: '0.85rem', color: '#d97706' }}>
+                    Note: Save the order first to remove background from newly uploaded images
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Background Removal Error Display */}
+            {errors.background && (
+              <div style={{ marginTop: '12px', padding: '10px', background: '#fee2e2', borderRadius: '6px', border: '1px solid #fca5a5' }}>
+                <div style={{ fontSize: '0.85rem', color: '#dc2626' }}>
+                  {errors.background}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 3D Model Upload */}
+          <div className="form-group">
+            <label>3D Model Files <span style={{ color: '#6b7280', fontWeight: 'normal' }}>({modelPreviews.length}/{MAX_MODELS})</span></label>
+            <div style={{ border: '2px dashed #d1d5db', borderRadius: '8px', padding: '16px', background: '#f9fafb' }}>
+              {modelPreviews.length > 0 && (
+                <div style={{ marginBottom: modelPreviews.length < MAX_MODELS ? '16px' : '0' }}>
+                  {modelPreviews.map((model, index) => {
+                    const isExistingModel = index < existingModels.length;
+                    return (
+                      <div key={index} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '10px 12px',
+                        background: 'white',
+                        borderRadius: '6px',
+                        border: '1px solid #e5e7eb',
+                        marginBottom: '8px'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+                          <div style={{
+                            width: '40px',
+                            height: '40px',
+                            background: '#f3f4f6',
+                            borderRadius: '6px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '1.2rem',
+                            color: '#6b7280',
+                            flexShrink: 0
+                          }}>
+                            📦
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '0.875rem', fontWeight: '500', color: '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {model.name}
+                            </div>
+                            <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                              {model.type.toUpperCase()} {model.size !== '-' ? `• ${model.size} MB` : ''}
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeModel(index)}
+                          style={{
+                            background: '#ef4444',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            width: '28px',
+                            height: '28px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                            marginLeft: '10px'
+                          }}
+                        >
+                          &times;
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {modelPreviews.length < MAX_MODELS && (
+                <div style={{ textAlign: 'center' }}>
+                  <input
+                    type="file"
+                    id="models"
+                    accept=".glb,.lpc,.obj"
+                    onChange={handleModelChange}
+                    multiple
+                    style={{ display: 'none' }}
+                  />
+                  <label
+                    htmlFor="models"
+                    style={{
+                      cursor: 'pointer',
+                      color: '#6b7280',
+                      display: 'inline-block',
+                      padding: '12px 20px',
+                      border: '1px dashed #9ca3af',
+                      borderRadius: '6px',
+                      background: 'white'
+                    }}
+                  >
+                    <div style={{ fontSize: '1.5rem', marginBottom: '4px' }}>📦</div>
+                    <div style={{ fontSize: '0.875rem' }}>Add 3D Models</div>
+                    <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '2px' }}>
+                      GLB, LPC, OBJ (max 50MB each)
+                    </div>
+                  </label>
+                </div>
+              )}
+            </div>
+            {errors.model && <span className="error-message">{errors.model}</span>}
           </div>
 
           {/* Figures and Pricing */}
@@ -998,24 +1567,45 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
             </div>
           </div>
 
-          {/* Shipping Address */}
-          <div style={{ background: '#f9fafb', borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
-            <label style={{ fontWeight: 600, marginBottom: '12px', display: 'block', color: '#374151' }}>Shipping Address</label>
-            <div className="form-group" style={{ marginBottom: '12px' }}>
-              <input type="text" name="shipping_name" value={formData.shipping_name} onChange={handleChange} placeholder="Recipient name" />
-            </div>
-            <div className="form-group" style={{ marginBottom: '12px' }}>
-              <input type="text" name="shipping_line1" value={formData.shipping_line1} onChange={handleChange} placeholder="Address line 1" />
-            </div>
-            <div className="form-group" style={{ marginBottom: '12px' }}>
-              <input type="text" name="shipping_line2" value={formData.shipping_line2} onChange={handleChange} placeholder="Address line 2 (optional)" />
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '12px' }}>
-              <input type="text" name="shipping_city" value={formData.shipping_city} onChange={handleChange} placeholder="City" style={{ padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' }} />
-              <input type="text" name="shipping_state" value={formData.shipping_state} onChange={handleChange} placeholder="State" style={{ padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' }} />
-              <input type="text" name="shipping_zip" value={formData.shipping_zip} onChange={handleChange} placeholder="ZIP" style={{ padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' }} />
-            </div>
+          {/* Complementary Items */}
+          <div className="form-group">
+            <label htmlFor="complementary_items">Add Complementary Items</label>
+            <select
+              id="complementary_items"
+              name="complementary_items"
+              value={formData.complementary_items}
+              onChange={handleChange}
+            >
+              <option value="">-- None --</option>
+              <option value="gift_box">Gift Box</option>
+              <option value="led_light_base">LED Light Base</option>
+              <option value="protective_case">Protective Case</option>
+              <option value="display_stand">Display Stand</option>
+              <option value="gift_card">Gift Card</option>
+              <option value="custom_engraving">Custom Engraving</option>
+            </select>
           </div>
+
+          {/* Shipping Address - Hidden for B2B Users */}
+          {!isB2BUser && (
+            <div style={{ background: '#f9fafb', borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
+              <label style={{ fontWeight: 600, marginBottom: '12px', display: 'block', color: '#374151' }}>Shipping Address</label>
+              <div className="form-group" style={{ marginBottom: '12px' }}>
+                <input type="text" name="shipping_name" value={formData.shipping_name} onChange={handleChange} placeholder="Recipient name" />
+              </div>
+              <div className="form-group" style={{ marginBottom: '12px' }}>
+                <input type="text" name="shipping_line1" value={formData.shipping_line1} onChange={handleChange} placeholder="Address line 1" />
+              </div>
+              <div className="form-group" style={{ marginBottom: '12px' }}>
+                <input type="text" name="shipping_line2" value={formData.shipping_line2} onChange={handleChange} placeholder="Address line 2 (optional)" />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '12px' }}>
+                <input type="text" name="shipping_city" value={formData.shipping_city} onChange={handleChange} placeholder="City" style={{ padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' }} />
+                <input type="text" name="shipping_state" value={formData.shipping_state} onChange={handleChange} placeholder="State" style={{ padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' }} />
+                <input type="text" name="shipping_zip" value={formData.shipping_zip} onChange={handleChange} placeholder="ZIP" style={{ padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' }} />
+              </div>
+            </div>
+          )}
 
           {/* Comments */}
           <div className="form-group">
@@ -1023,18 +1613,20 @@ const OrderModal = ({ isOpen, onClose, onSave, order = null }) => {
             <input type="text" id="comments" name="comments" value={formData.comments} onChange={handleChange} placeholder="Additional notes" />
           </div>
 
-          {/* Internal Notes - Editable by Artists/Lead Artists/Production Tech */}
-          <div className="form-group">
-            <label htmlFor="internal_notes">Internal Notes <span style={{ color: '#6b7280', fontWeight: 'normal' }}>(Team Communication)</span></label>
-            <textarea
-              id="internal_notes"
-              name="internal_notes"
-              value={formData.internal_notes}
-              onChange={handleChange}
-              placeholder="Add notes for the team..."
-              rows={3}
-            />
-          </div>
+          {/* Internal Notes - Editable by Artists/Lead Artists/Production Tech - Hidden for B2B Users */}
+          {!isB2BUser && (
+            <div className="form-group">
+              <label htmlFor="internal_notes">Internal Notes <span style={{ color: '#6b7280', fontWeight: 'normal' }}>(Team Communication)</span></label>
+              <textarea
+                id="internal_notes"
+                name="internal_notes"
+                value={formData.internal_notes}
+                onChange={handleChange}
+                placeholder="Add notes for the team..."
+                rows={3}
+              />
+            </div>
+          )}
 
           {errors.submit && (
             <div style={{ color: '#ef4444', fontSize: '0.875rem', marginBottom: '10px' }}>{errors.submit}</div>

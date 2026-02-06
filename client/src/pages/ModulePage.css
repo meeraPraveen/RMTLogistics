@@ -152,6 +152,11 @@ tbody tr:hover {
   color: #4A1523;
 }
 
+.status-badge.ready-qc {
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
 .status-badge.in-progress {
   background: #F9E4E8;
   color: #5C1E2A;
@@ -193,6 +198,7 @@ tbody tr:hover {
 .action-buttons {
   display: flex;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .btn-small {

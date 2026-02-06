@@ -8,6 +8,7 @@ import UserManagement from './pages/UserManagement';
 import OrderManagement from './pages/OrderManagement';
 import InventoryManagement from './pages/InventoryManagement';
 import PrintingSoftware from './pages/PrintingSoftware';
+import Shipping from './pages/Shipping';
 import SystemConfig from './pages/SystemConfig';
 import Unauthorized from './pages/Unauthorized';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -71,6 +72,15 @@ function App() {
             element={
               <ProtectedRoute module="printing_software">
                 <PrintingSoftware />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/shipping"
+            element={
+              <ProtectedRoute module="shipping">
+                <Shipping />
               </ProtectedRoute>
             }
           />

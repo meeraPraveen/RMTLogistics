@@ -10,6 +10,7 @@ const MODULES = [
   { id: 'order-management', name: 'Order Management' },
   { id: 'inventory-management', name: 'Inventory Management' },
   { id: 'printing-software', name: 'Printing Software' },
+  { id: 'shipping', name: 'Shipping' },
   { id: 'system-config', name: 'System Configuration' }
 ];
 

@@ -1,18 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { modulesApi, ordersApi, setAuthToken } from '../utils/api';
+import { ordersApi, setAuthToken } from '../utils/api';
 import { useAuth0 } from '@auth0/auth0-react';
 import { usePermissions } from '../hooks/usePermissions';
 import './ModulePage.css';
 
-const PrintingSoftware = () => {
+const Shipping = () => {
   const { getIdTokenClaims } = useAuth0();
-  const { hasPermission, permissions } = usePermissions();
-  const [readyToPrintOrders, setReadyToPrintOrders] = useState([]);
+  const { hasPermission } = usePermissions();
+  const [completedOrders, setCompletedOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [viewingImages, setViewingImages] = useState(null);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-  const isQCRole = permissions && permissions.role && permissions.role !== 'B2B User';
 
   useEffect(() => {
     loadData();
@@ -23,21 +22,13 @@ const PrintingSoftware = () => {
       const idToken = await getIdTokenClaims();
       setAuthToken(idToken.__raw);
 
-      // Fetch both 'Ready to Print' and 'Ready For QC' orders
-      const [readyToPrintRes, readyForQCRes] = await Promise.all([
-        ordersApi.getAll({ status: 'Ready to Print', limit: 100 }),
-        ordersApi.getAll({ status: 'Ready For QC', limit: 100 })
-      ]);
+      // Fetch 'Completed' orders
+      const completedRes = await ordersApi.getAll({ status: 'Completed', limit: 100 });
 
-      const allOrders = [
-        ...(readyToPrintRes.data.data || []),
-        ...(readyForQCRes.data.data || [])
-      ];
-
-      setReadyToPrintOrders(allOrders);
+      setCompletedOrders(completedRes.data.data || []);
       setLoading(false);
     } catch (error) {
-      console.error('Failed to load printing data:', error);
+      console.error('Failed to load shipping data:', error);
       setLoading(false);
     }
   };
@@ -136,12 +127,12 @@ const PrintingSoftware = () => {
     return statusMap[status] || 'default';
   };
 
-  const handlePrint = async (orderId, orderInternalId) => {
-    if (!confirm(`Mark order ${orderInternalId} as printed and move to QC?`)) return;
+  const handleShip = async (orderId, orderInternalId) => {
+    if (!confirm(`Mark order ${orderInternalId} as shipped?`)) return;
     try {
       const idToken = await getIdTokenClaims();
       setAuthToken(idToken.__raw);
-      await ordersApi.update(orderId, { status: 'Ready For QC' });
+      await ordersApi.update(orderId, { status: 'Shipped' });
       loadData(); // Reload orders
     } catch (err) {
       console.error('Failed to update order status:', err);
@@ -149,26 +140,13 @@ const PrintingSoftware = () => {
     }
   };
 
-  const handleApproveQC = async (orderId, orderInternalId) => {
-    if (!confirm(`Approve QC for order ${orderInternalId}?`)) return;
-    try {
-      const idToken = await getIdTokenClaims();
-      setAuthToken(idToken.__raw);
-      await ordersApi.approveQC(orderId);
-      loadData(); // Reload orders
-    } catch (err) {
-      console.error('Failed to approve QC:', err);
-      alert(err.response?.data?.message || 'Failed to approve QC');
-    }
-  };
-
-  const canWrite = hasPermission('printing_software', 'write');
+  const canWrite = hasPermission('shipping', 'write');
 
   if (loading) {
     return (
       <div className="loading-container">
         <div className="spinner"></div>
-        <p>Loading printing software...</p>
+        <p>Loading shipping module...</p>
       </div>
     );
   }
@@ -177,12 +155,9 @@ const PrintingSoftware = () => {
     <div className="module-page">
       <div className="page-header">
         <div>
-          <h1>🖨️ Printing Software</h1>
-          <p>Manage print jobs and monitor printer status</p>
+          <h1>📦 Shipping</h1>
+          <p>Manage shipments and track delivery status (Shippo Integration)</p>
         </div>
-        {canWrite && (
-          <button className="primary-btn">Add Print Job</button>
-        )}
       </div>
 
       <div className="permissions-info">
@@ -190,12 +165,12 @@ const PrintingSoftware = () => {
         <div className="permission-badges">
           <span className="badge">Read</span>
           {canWrite && <span className="badge">Write</span>}
-          {hasPermission('printing_software', 'update') && <span className="badge">Update</span>}
+          {hasPermission('shipping', 'update') && <span className="badge">Update</span>}
         </div>
       </div>
 
       <div className="section">
-        <h2>Print Queue (Ready to Print & Ready For QC)</h2>
+        <h2>Completed Orders Ready to Ship</h2>
         <div className="data-table">
           <table>
             <thead>
@@ -215,14 +190,14 @@ const PrintingSoftware = () => {
               </tr>
             </thead>
             <tbody>
-              {readyToPrintOrders.length === 0 ? (
+              {completedOrders.length === 0 ? (
                 <tr>
                   <td colSpan="12" style={{ textAlign: 'center', padding: '40px' }}>
-                    No orders ready to print
+                    No completed orders ready to ship
                   </td>
                 </tr>
               ) : (
-                readyToPrintOrders.map((order) => (
+                completedOrders.map((order) => (
                   <tr key={order.id}>
                     <td><strong>{order.internal_order_id}</strong></td>
                     <td>
@@ -294,32 +269,12 @@ const PrintingSoftware = () => {
                       <div className="action-buttons" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         <button
                           className="btn-small"
-                          style={{ background: '#722F37', color: 'white' }}
-                          onClick={() => alert('Point Cloud Generation will be linked here')}
-                          title="Generate Point Cloud"
+                          style={{ background: '#3b82f6', color: 'white' }}
+                          onClick={() => handleShip(order.id, order.internal_order_id)}
+                          title="Ship Order (Shippo Integration)"
                         >
-                          Point Cloud
+                          Ship
                         </button>
-                        {order.status === 'Ready to Print' && (
-                          <button
-                            className="btn-small"
-                            style={{ background: '#10b981', color: 'white' }}
-                            onClick={() => handlePrint(order.id, order.internal_order_id)}
-                            title="Print Order"
-                          >
-                            Print
-                          </button>
-                        )}
-                        {isQCRole && order.status === 'Ready For QC' && (
-                          <button
-                            className="btn-small"
-                            style={{ background: '#10b981', color: 'white' }}
-                            onClick={() => handleApproveQC(order.id, order.internal_order_id)}
-                            title="Approve QC"
-                          >
-                            ✓ QC
-                          </button>
-                        )}
                       </div>
                     </td>
                   </tr>
@@ -474,4 +429,4 @@ const PrintingSoftware = () => {
   );
 };
 
-export default PrintingSoftware;
+export default Shipping;

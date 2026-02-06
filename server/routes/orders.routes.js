@@ -9,13 +9,17 @@ import {
   generateInternalOrderId
 } from '../services/order.service.js';
 import { getCompanyById } from '../services/company.service.js';
-import { uploadOrderImage } from '../config/upload.config.js';
+import { uploadOrderImage, uploadOrderFiles } from '../config/upload.config.js';
 import { requireRole } from '../middleware/rbac.middleware.js';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -187,8 +191,14 @@ router.get('/', requireRole(['Artist', 'Lead Artist', 'Admin', 'SuperAdmin', 'B2
 
     const result = await getAllOrders(options);
 
+    // Filter out 'Ready to Print' orders for Artists and Lead Artists
+    let orders = result.orders;
+    if (['Artist', 'Lead Artist'].includes(req.user.role)) {
+      orders = orders.filter(order => order.status !== 'Ready to Print');
+    }
+
     // Filter sensitive fields for Artist roles
-    const filteredOrders = result.orders.map(order => filterSensitiveFields(order, req.user.role));
+    const filteredOrders = orders.map(order => filterSensitiveFields(order, req.user.role));
 
     res.json({
       success: true,
@@ -295,7 +305,10 @@ router.get('/:id', requireRole(['Artist', 'Lead Artist', 'Admin', 'SuperAdmin', 
  * @desc    Create a new order
  * @access  Private (Admin, SuperAdmin, B2B User) - Artists cannot create orders
  */
-router.post('/', requireRole(['Admin', 'SuperAdmin', 'B2B User']), prepareNewOrderUpload, uploadOrderImage.array('images', 5), async (req, res) => {
+router.post('/', requireRole(['Admin', 'SuperAdmin', 'B2B User']), prepareNewOrderUpload, uploadOrderFiles.fields([
+  { name: 'images', maxCount: 5 },
+  { name: 'models', maxCount: 3 }
+]), async (req, res) => {
   try {
     // B2B users can only create orders for their own company
     let effectiveCompanyId = req.body.company_id || null;
@@ -330,11 +343,17 @@ router.post('/', requireRole(['Admin', 'SuperAdmin', 'B2B User']), prepareNewOrd
     };
 
     // Add image information if uploaded (supports up to 5 images)
-    if (req.files && req.files.length > 0) {
-      const imageNames = req.files.map(file => file.filename);
-      const imagePaths = req.files.map(file => `/uploads/orders/${req.orderFolderPath}/${file.filename}`);
+    if (req.files && req.files.images && req.files.images.length > 0) {
+      const imageNames = req.files.images.map(file => file.filename);
+      const imagePaths = req.files.images.map(file => `/uploads/orders/${req.orderFolderPath}/${file.filename}`);
       orderData.image_name = JSON.stringify(imageNames);
       orderData.image_path = JSON.stringify(imagePaths);
+    }
+
+    // Add model information if uploaded (supports up to 3 models)
+    if (req.files && req.files.models && req.files.models.length > 0) {
+      const modelPaths = req.files.models.map(file => `/uploads/orders/${req.orderFolderPath}/models/${file.filename}`);
+      orderData.model_path = JSON.stringify(modelPaths);
     }
 
     // Get user ID from auth
@@ -363,7 +382,10 @@ router.post('/', requireRole(['Admin', 'SuperAdmin', 'B2B User']), prepareNewOrd
  * @access  Private (Artist, Lead Artist, Admin, SuperAdmin, B2B User)
  * Note: Artists can only upload images, not modify other order data
  */
-router.put('/:id', requireRole(['Artist', 'Lead Artist', 'Admin', 'SuperAdmin', 'B2B User']), prepareUpdateOrderUpload, uploadOrderImage.array('images', 5), async (req, res) => {
+router.put('/:id', requireRole(['Artist', 'Lead Artist', 'Admin', 'SuperAdmin', 'B2B User']), prepareUpdateOrderUpload, uploadOrderFiles.fields([
+  { name: 'images', maxCount: 5 },
+  { name: 'models', maxCount: 3 }
+]), async (req, res) => {
   try {
     const orderId = parseInt(req.params.id);
     const artistRoles = ['Artist', 'Lead Artist'];
@@ -394,7 +416,7 @@ router.put('/:id', requireRole(['Artist', 'Lead Artist', 'Admin', 'SuperAdmin', 
 
     let updates = {};
 
-    // Artists/Lead Artists/Production Tech can ONLY update images and internal_notes - no other fields
+    // Artists/Lead Artists/Production Tech can ONLY update images, models, and internal_notes - no other fields
     if (isLimitedRole) {
       // Parse existing images from request body
       let existingImages = [];
@@ -407,9 +429,9 @@ router.put('/:id', requireRole(['Artist', 'Lead Artist', 'Admin', 'SuperAdmin', 
       }
 
       // Add newly uploaded images
-      if (req.files && req.files.length > 0) {
-        const newImageNames = req.files.map(file => file.filename);
-        const newImagePaths = req.files.map(file => `/uploads/orders/${req.orderFolderPath}/${file.filename}`);
+      if (req.files && req.files.images && req.files.images.length > 0) {
+        const newImageNames = req.files.images.map(file => file.filename);
+        const newImagePaths = req.files.images.map(file => `/uploads/orders/${req.orderFolderPath}/${file.filename}`);
 
         const allImagePaths = [...existingImages, ...newImagePaths].slice(0, 5);
         const allImageNames = [
@@ -422,6 +444,25 @@ router.put('/:id', requireRole(['Artist', 'Lead Artist', 'Admin', 'SuperAdmin', 
       } else if (req.body.existing_images !== undefined) {
         updates.image_name = JSON.stringify(existingImages.map(p => p.split('/').pop()));
         updates.image_path = JSON.stringify(existingImages);
+      }
+
+      // Parse existing models from request body
+      let existingModels = [];
+      if (req.body.existing_models) {
+        try {
+          existingModels = JSON.parse(req.body.existing_models);
+        } catch (e) {
+          existingModels = [];
+        }
+      }
+
+      // Add newly uploaded models
+      if (req.files && req.files.models && req.files.models.length > 0) {
+        const newModelPaths = req.files.models.map(file => `/uploads/orders/${req.orderFolderPath}/models/${file.filename}`);
+        const allModelPaths = [...existingModels, ...newModelPaths].slice(0, 3);
+        updates.model_path = JSON.stringify(allModelPaths);
+      } else if (req.body.existing_models !== undefined) {
+        updates.model_path = JSON.stringify(existingModels);
       }
 
       // Allow Artists to update internal_notes
@@ -452,22 +493,43 @@ router.put('/:id', requireRole(['Artist', 'Lead Artist', 'Admin', 'SuperAdmin', 
         effectiveCompanyId = req.user.company_id;
       }
 
-      updates = {
-        ...req.body,
-        // Parse JSON strings from form data
-        shipping_address: typeof req.body.shipping_address === 'string'
+      updates = { ...req.body };
+
+      // Only parse and set shipping_address if it's provided
+      if (req.body.shipping_address !== undefined) {
+        updates.shipping_address = typeof req.body.shipping_address === 'string'
           ? JSON.parse(req.body.shipping_address)
-          : req.body.shipping_address,
-        // Parse boolean values
-        has_background: req.body.has_background === 'true' || req.body.has_background === true,
-        has_text: req.body.has_text === 'true' || req.body.has_text === true,
-        // Parse numeric values
-        unit_rate: req.body.unit_rate ? parseFloat(req.body.unit_rate) : undefined,
-        total_amount: req.body.total_amount ? parseFloat(req.body.total_amount) : undefined,
-        company_id: effectiveCompanyId, // UUID string, not integer
-        assigned_artist_id: req.body.assigned_artist_id ? parseInt(req.body.assigned_artist_id) : null,
-        assigned_qc_id: req.body.assigned_qc_id ? parseInt(req.body.assigned_qc_id) : null,
-      };
+          : req.body.shipping_address;
+      }
+
+      // Only parse boolean values if they're provided
+      if (req.body.has_background !== undefined) {
+        updates.has_background = req.body.has_background === 'true' || req.body.has_background === true;
+      }
+      if (req.body.has_text !== undefined) {
+        updates.has_text = req.body.has_text === 'true' || req.body.has_text === true;
+      }
+
+      // Only parse numeric values if they're provided
+      if (req.body.unit_rate !== undefined) {
+        updates.unit_rate = req.body.unit_rate ? parseFloat(req.body.unit_rate) : undefined;
+      }
+      if (req.body.total_amount !== undefined) {
+        updates.total_amount = req.body.total_amount ? parseFloat(req.body.total_amount) : undefined;
+      }
+
+      // Only set company_id if provided (or if B2B User)
+      if (req.body.company_id !== undefined || req.user.role === 'B2B User') {
+        updates.company_id = effectiveCompanyId; // UUID string, not integer
+      }
+
+      // Only set assigned IDs if provided
+      if (req.body.assigned_artist_id !== undefined) {
+        updates.assigned_artist_id = req.body.assigned_artist_id ? parseInt(req.body.assigned_artist_id) : null;
+      }
+      if (req.body.assigned_qc_id !== undefined) {
+        updates.assigned_qc_id = req.body.assigned_qc_id ? parseInt(req.body.assigned_qc_id) : null;
+      }
 
       // Handle image updates (supports up to 5 images)
       let existingImages = [];
@@ -479,9 +541,9 @@ router.put('/:id', requireRole(['Artist', 'Lead Artist', 'Admin', 'SuperAdmin', 
         }
       }
 
-      if (req.files && req.files.length > 0) {
-        const newImageNames = req.files.map(file => file.filename);
-        const newImagePaths = req.files.map(file => `/uploads/orders/${req.orderFolderPath}/${file.filename}`);
+      if (req.files && req.files.images && req.files.images.length > 0) {
+        const newImageNames = req.files.images.map(file => file.filename);
+        const newImagePaths = req.files.images.map(file => `/uploads/orders/${req.orderFolderPath}/${file.filename}`);
 
         const allImagePaths = [...existingImages, ...newImagePaths].slice(0, 5);
         const allImageNames = [
@@ -495,6 +557,45 @@ router.put('/:id', requireRole(['Artist', 'Lead Artist', 'Admin', 'SuperAdmin', 
         updates.image_name = JSON.stringify(existingImages.map(p => p.split('/').pop()));
         updates.image_path = JSON.stringify(existingImages);
       }
+
+      // Handle model updates (supports up to 3 models)
+      let existingModels = [];
+      if (req.body.existing_models) {
+        try {
+          existingModels = JSON.parse(req.body.existing_models);
+        } catch (e) {
+          existingModels = [];
+        }
+      }
+
+      if (req.files && req.files.models && req.files.models.length > 0) {
+        const newModelPaths = req.files.models.map(file => `/uploads/orders/${req.orderFolderPath}/models/${file.filename}`);
+        const allModelPaths = [...existingModels, ...newModelPaths].slice(0, 3);
+        updates.model_path = JSON.stringify(allModelPaths);
+      } else if (req.body.existing_models !== undefined) {
+        updates.model_path = JSON.stringify(existingModels);
+      }
+    }
+
+    // ===== AUTOMATIC WORKFLOW STATUS TRANSITIONS =====
+    // 1. Pending → Processing: When artist is assigned
+    if (updates.assigned_artist_id && !existingOrder.assigned_artist_id && existingOrder.status === 'Pending') {
+      updates.status = 'Processing';
+      console.log(`🔄 Auto-updating status: Pending → Processing (artist assigned)`);
+    }
+
+    // 2. Processing → Ready For QC: When 3D model is uploaded
+    const hasExistingModels = existingOrder.model_path && existingOrder.model_path !== 'null';
+    const hasNewModels = updates.model_path && updates.model_path !== 'null' && updates.model_path !== '[]';
+    if (!hasExistingModels && hasNewModels && existingOrder.status === 'Processing') {
+      updates.status = 'Ready For QC';
+      console.log(`🔄 Auto-updating status: Processing → Ready For QC (3D model uploaded)`);
+    }
+
+    // 3. Track when order reaches 'Ready to Print' stage
+    if (updates.status === 'Ready to Print' && existingOrder.status !== 'Ready to Print') {
+      updates.ready_for_print_reached = true;
+      console.log(`🔄 Marking order as reached Ready to Print stage`);
     }
 
     const updatedOrder = await updateOrder(orderId, updates);
@@ -519,6 +620,80 @@ router.put('/:id', requireRole(['Artist', 'Lead Artist', 'Admin', 'SuperAdmin', 
     res.status(500).json({
       success: false,
       error: 'Failed to update order',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * @route   POST /api/orders/:id/approve-qc
+ * @desc    Approve QC for an order (handles both first and second QC approval)
+ * @access  Private (All roles except B2B User) - QC personnel
+ */
+router.post('/:id/approve-qc', async (req, res) => {
+  // Block B2B Users from QC approval
+  if (req.user.role === 'B2B User') {
+    return res.status(403).json({
+      success: false,
+      error: 'Access denied',
+      message: 'B2B Users cannot approve QC'
+    });
+  }
+  try {
+    const orderId = parseInt(req.params.id);
+    const order = await getOrderById(orderId);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        error: 'Order not found'
+      });
+    }
+
+    // QC Approval only works when status is 'Ready For QC'
+    if (order.status !== 'Ready For QC') {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid status for QC approval',
+        message: `Order must be in 'Ready For QC' status. Current status: ${order.status}`
+      });
+    }
+
+    // Determine next status based on workflow stage
+    let newStatus;
+    let updateData = {};
+
+    if (!order.ready_for_print_reached) {
+      // First QC approval: Ready For QC → Ready to Print
+      newStatus = 'Ready to Print';
+      updateData = {
+        status: newStatus,
+        ready_for_print_reached: true,
+        assigned_qc_id: req.user.id // Track who approved
+      };
+      console.log(`✅ First QC Approval: Ready For QC → Ready to Print`);
+    } else {
+      // Second QC approval (after printing): Ready For QC → Completed
+      newStatus = 'Completed';
+      updateData = {
+        status: newStatus,
+        assigned_qc_id: req.user.id // Track who approved
+      };
+      console.log(`✅ Second QC Approval: Ready For QC → Completed`);
+    }
+
+    const updatedOrder = await updateOrder(orderId, updateData);
+
+    res.json({
+      success: true,
+      data: updatedOrder,
+      message: `QC approved. Status updated to: ${newStatus}`
+    });
+  } catch (error) {
+    console.error('Error approving QC:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to approve QC',
       message: error.message
     });
   }
@@ -701,6 +876,96 @@ Format your response as a brief description suitable for an order description fi
       success: false,
       error: 'Failed to extract metadata',
       message: error.message
+    });
+  }
+});
+
+/**
+ * @route   POST /api/orders/remove-background
+ * @desc    Remove background from an order image using Remove.bg API
+ * @access  Private (Artist, Lead Artist, Admin, SuperAdmin, B2B User)
+ */
+router.post('/remove-background', requireRole(['Artist', 'Lead Artist', 'Admin', 'SuperAdmin', 'B2B User']), async (req, res) => {
+  try {
+    console.log('🎨 Remove background endpoint called');
+    console.log('Request body:', req.body);
+
+    const { imageUrl } = req.body;
+
+    if (!imageUrl) {
+      console.log('❌ No imageUrl provided');
+      return res.status(400).json({
+        success: false,
+        error: 'Image URL is required'
+      });
+    }
+
+    console.log('🔍 Processing image:', imageUrl);
+
+    // Read the image file from the server
+    const relativePath = imageUrl.replace(/^\/uploads\//, '');
+    const imagePath = path.join(__dirname, '../../uploads', relativePath);
+
+    if (!fs.existsSync(imagePath)) {
+      return res.status(404).json({
+        success: false,
+        error: 'Image file not found on server'
+      });
+    }
+
+    // Generate new filename with _nobg suffix
+    const ext = path.extname(imagePath);
+    const baseNameWithoutExt = path.basename(imagePath, ext);
+    const newFileName = `${baseNameWithoutExt}_nobg${ext}`;
+    const newImagePath = path.join(path.dirname(imagePath), newFileName);
+
+    // Get Python command from environment or use default
+    const pythonCmd = process.env.PYTHON_CMD || 'python';
+    const scriptPath = path.join(__dirname, '../../scripts/remove_bg.py');
+
+    console.log('🐍 Calling Python background removal script...');
+
+    // Call Python script to remove background
+    const { stdout, stderr } = await execAsync(
+      `"${pythonCmd}" "${scriptPath}" "${imagePath}" "${newImagePath}"`
+    );
+
+    if (stderr && !stdout.includes('SUCCESS')) {
+      throw new Error(`Python script error: ${stderr}`);
+    }
+
+    console.log('✅ Background removed successfully');
+
+    // Generate the new URL path
+    const newRelativePath = path.dirname(relativePath) + '/' + newFileName;
+    const newImageUrl = `/uploads/${newRelativePath.replace(/\\/g, '/')}`;
+
+    console.log('💾 Saved new image:', newImageUrl);
+
+    res.json({
+      success: true,
+      data: {
+        originalUrl: imageUrl,
+        processedUrl: newImageUrl,
+        message: 'Background removed successfully'
+      }
+    });
+  } catch (error) {
+    console.error('Error removing background:', error);
+
+    // Check if it's a Python/rembg related error
+    let errorMessage = error.message;
+
+    if (error.message.includes('Python script error')) {
+      errorMessage = 'Background removal failed. Make sure Python and rembg are installed.';
+    } else if (error.code === 'ENOENT') {
+      errorMessage = 'Python not found. Please install Python 3 and rembg library.';
+    }
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to remove background',
+      message: errorMessage
     });
   }
 });

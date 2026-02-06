@@ -124,7 +124,8 @@ export const getAllProducts = async (options = {}) => {
     return {
       products: result.rows.map(p => ({
         ...p,
-        price: parseFloat(p.price)
+        price: parseFloat(p.price),
+        weight: p.weight ? parseFloat(p.weight) : null
       })),
       pagination: {
         page,
@@ -146,7 +147,11 @@ export const getProductById = async (productId) => {
   try {
     const result = await query('SELECT * FROM products WHERE id = $1', [productId]);
     if (result.rows.length === 0) return null;
-    return { ...result.rows[0], price: parseFloat(result.rows[0].price) };
+    return {
+      ...result.rows[0],
+      price: parseFloat(result.rows[0].price),
+      weight: result.rows[0].weight ? parseFloat(result.rows[0].weight) : null
+    };
   } catch (error) {
     console.error('Error fetching product by ID:', error);
     throw error;
@@ -160,7 +165,11 @@ export const getProductBySku = async (sku) => {
   try {
     const result = await query('SELECT * FROM products WHERE sku = $1', [sku]);
     if (result.rows.length === 0) return null;
-    return { ...result.rows[0], price: parseFloat(result.rows[0].price) };
+    return {
+      ...result.rows[0],
+      price: parseFloat(result.rows[0].price),
+      weight: result.rows[0].weight ? parseFloat(result.rows[0].weight) : null
+    };
   } catch (error) {
     console.error('Error fetching product by SKU:', error);
     throw error;
@@ -172,7 +181,7 @@ export const getProductBySku = async (sku) => {
  */
 export const createProduct = async (productData) => {
   try {
-    const { sku, price, stock_quantity = 0, low_stock_threshold = 50 } = productData;
+    const { sku, price, weight = null, stock_quantity = 0, low_stock_threshold = 50 } = productData;
 
     if (!sku || !price) {
       throw new Error('SKU and price are required');
@@ -183,19 +192,23 @@ export const createProduct = async (productData) => {
     const result = await query(
       `INSERT INTO products (
         sku, product_line, shape, size, base_type, orientation,
-        display_name, is_parent, parent_sku, price, stock_quantity,
+        display_name, is_parent, parent_sku, price, weight, stock_quantity,
         low_stock_threshold, is_active
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true)
       RETURNING *`,
       [
         sku, parsed.product_line, parsed.shape, parsed.size,
         parsed.base_type, parsed.orientation, parsed.display_name,
-        parsed.is_parent, parsed.parent_sku, price,
+        parsed.is_parent, parsed.parent_sku, price, weight,
         stock_quantity, low_stock_threshold
       ]
     );
 
-    return { ...result.rows[0], price: parseFloat(result.rows[0].price) };
+    return {
+      ...result.rows[0],
+      price: parseFloat(result.rows[0].price),
+      weight: result.rows[0].weight ? parseFloat(result.rows[0].weight) : null
+    };
   } catch (error) {
     console.error('Error creating product:', error);
     throw error;
@@ -207,7 +220,7 @@ export const createProduct = async (productData) => {
  */
 export const updateProduct = async (productId, updates) => {
   try {
-    const allowedFields = ['price', 'stock_quantity', 'low_stock_threshold', 'is_active'];
+    const allowedFields = ['price', 'weight', 'stock_quantity', 'low_stock_threshold', 'is_active'];
     const setters = [];
     const params = [];
     let paramIndex = 1;
@@ -234,7 +247,11 @@ export const updateProduct = async (productId, updates) => {
       throw new Error('Product not found');
     }
 
-    return { ...result.rows[0], price: parseFloat(result.rows[0].price) };
+    return {
+      ...result.rows[0],
+      price: parseFloat(result.rows[0].price),
+      weight: result.rows[0].weight ? parseFloat(result.rows[0].weight) : null
+    };
   } catch (error) {
     console.error('Error updating product:', error);
     throw error;
@@ -288,7 +305,11 @@ export const adjustStock = async (sku, adjustment) => {
     );
 
     await client.query('COMMIT');
-    return { ...updateResult.rows[0], price: parseFloat(updateResult.rows[0].price) };
+    return {
+      ...updateResult.rows[0],
+      price: parseFloat(updateResult.rows[0].price),
+      weight: updateResult.rows[0].weight ? parseFloat(updateResult.rows[0].weight) : null
+    };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -308,7 +329,11 @@ export const getLowStockProducts = async () => {
        AND is_active = true AND is_parent = false
        ORDER BY stock_quantity ASC`
     );
-    return result.rows.map(p => ({ ...p, price: parseFloat(p.price) }));
+    return result.rows.map(p => ({
+      ...p,
+      price: parseFloat(p.price),
+      weight: p.weight ? parseFloat(p.weight) : null
+    }));
   } catch (error) {
     console.error('Error fetching low stock products:', error);
     throw error;
@@ -354,12 +379,16 @@ export const getInventoryStats = async () => {
 export const getProductCatalog = async () => {
   try {
     const result = await query(
-      `SELECT id, sku, display_name, price, stock_quantity, shape, size, base_type, orientation
+      `SELECT id, sku, display_name, price, weight, stock_quantity, shape, size, base_type, orientation
        FROM products
        WHERE is_active = true AND is_parent = false
        ORDER BY shape, size, base_type, orientation`
     );
-    return result.rows.map(p => ({ ...p, price: parseFloat(p.price) }));
+    return result.rows.map(p => ({
+      ...p,
+      price: parseFloat(p.price),
+      weight: p.weight ? parseFloat(p.weight) : null
+    }));
   } catch (error) {
     console.error('Error fetching product catalog:', error);
     throw error;

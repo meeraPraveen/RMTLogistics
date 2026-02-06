@@ -47,6 +47,7 @@ const Layout = () => {
     { path: '/order-management', name: 'Order Management', module: 'order_management' },
     { path: '/inventory-management', name: 'Inventory', module: 'inventory_management' },
     { path: '/printing-software', name: 'Printing', module: 'printing_software' },
+    { path: '/shipping', name: 'Shipping', module: 'shipping' },
     { path: '/system-config', name: 'System Config', module: 'system_config' }
   ];
 

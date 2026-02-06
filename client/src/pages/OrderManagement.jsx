@@ -47,6 +47,19 @@ const OrderManagement = () => {
     }
   };
 
+  // Helper to parse model paths (handles both JSON array and single path)
+  const parseModelPaths = (modelPath) => {
+    if (!modelPath) return [];
+    try {
+      if (typeof modelPath === 'string' && modelPath.startsWith('[')) {
+        return JSON.parse(modelPath);
+      }
+      return [modelPath];
+    } catch (e) {
+      return [modelPath];
+    }
+  };
+
   const openImageViewer = (order) => {
     const paths = parseImagePaths(order.image_path);
     if (paths.length > 0) {
@@ -73,6 +86,27 @@ const OrderManagement = () => {
       console.error('Failed to download image:', error);
       // Fallback to opening in new tab
       window.open(imageUrl, '_blank');
+    }
+  };
+
+  const handleDownloadModel = async (modelUrl) => {
+    try {
+      const fullUrl = `${apiUrl}${modelUrl}`;
+      const response = await fetch(fullUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      // Extract filename from URL
+      const filename = modelUrl.split('/').pop() || 'model.glb';
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download model:', error);
+      alert('Failed to download model file');
     }
   };
 
@@ -150,22 +184,24 @@ const OrderManagement = () => {
       'Pending': 'pending',
       'Processing': 'processing',
       'Ready to Print': 'ready',
-      'In Progress': 'in-progress',
+      'Ready For QC': 'ready-qc',
       'Completed': 'completed',
       'Shipped': 'shipped'
     };
     return statusMap[status] || 'default';
   };
 
-  const handleSaveOrder = async (orderData, orderId = null, imageFiles = [], existingImages = []) => {
+  const handleSaveOrder = async (orderData, orderId = null, imageFiles = [], existingImages = [], modelFiles = [], existingModels = []) => {
     const idToken = await getIdTokenClaims();
     setAuthToken(idToken.__raw);
 
-    // Use FormData if there are image files or existing images to track
+    // Use FormData if there are image files, model files, or existing files to track
     const hasNewImages = imageFiles && imageFiles.length > 0;
     const hasExistingImages = existingImages && existingImages.length > 0;
+    const hasNewModels = modelFiles && modelFiles.length > 0;
+    const hasExistingModels = existingModels && existingModels.length > 0;
 
-    if (hasNewImages || hasExistingImages) {
+    if (hasNewImages || hasExistingImages || hasNewModels || hasExistingModels) {
       const formData = new FormData();
 
       // Add new image files (field name 'images' for multiple)
@@ -175,9 +211,21 @@ const OrderManagement = () => {
         });
       }
 
+      // Add new model files (field name 'models' for multiple)
+      if (hasNewModels) {
+        modelFiles.forEach(file => {
+          formData.append('models', file);
+        });
+      }
+
       // Add existing images that should be kept (for updates)
       if (orderId && hasExistingImages) {
         formData.append('existing_images', JSON.stringify(existingImages));
+      }
+
+      // Add existing models that should be kept (for updates)
+      if (orderId && hasExistingModels) {
+        formData.append('existing_models', JSON.stringify(existingModels));
       }
 
       // Add all order data fields to FormData
@@ -233,9 +281,23 @@ const OrderManagement = () => {
     }
   };
 
+  const handleApproveQC = async (orderId, orderInternalId) => {
+    if (!confirm(`Approve QC for order ${orderInternalId}?`)) return;
+    try {
+      const idToken = await getIdTokenClaims();
+      setAuthToken(idToken.__raw);
+      await ordersApi.approveQC(orderId);
+      loadOrders();
+    } catch (err) {
+      console.error('Failed to approve QC:', err);
+      alert(err.response?.data?.message || 'Failed to approve QC');
+    }
+  };
+
   const canWrite = hasPermission('order_management', 'write');
   const canUpdate = hasPermission('order_management', 'update');
   const canDelete = hasPermission('order_management', 'delete');
+  const isQCRole = permissions && permissions.role && permissions.role !== 'B2B User';
 
   if (loading) {
     return (
@@ -283,8 +345,8 @@ const OrderManagement = () => {
             <div className="stat-value" style={{ color: '#722F37' }}>{stats.processing}</div>
           </div>
           <div className="stat-card">
-            <div className="stat-label">In Progress</div>
-            <div className="stat-value" style={{ color: '#5C1E2A' }}>{stats.in_progress}</div>
+            <div className="stat-label">Ready For QC</div>
+            <div className="stat-value" style={{ color: '#3b82f6' }}>{stats.ready_for_qc}</div>
           </div>
           <div className="stat-card">
             <div className="stat-label">Completed</div>
@@ -311,7 +373,7 @@ const OrderManagement = () => {
           <option value="Pending">Pending</option>
           <option value="Processing">Processing</option>
           <option value="Ready to Print">Ready to Print</option>
-          <option value="In Progress">In Progress</option>
+          <option value="Ready For QC">Ready For QC</option>
           <option value="Completed">Completed</option>
           <option value="Shipped">Shipped</option>
         </select>
@@ -418,6 +480,7 @@ const OrderManagement = () => {
               <th>Status</th>
               <th>Qty</th>
               <th>Image</th>
+              <th>3D Model</th>
               <th>Date</th>
               {!isArtist && <th>Assigned Artist</th>}
               {!isArtist && <th>Assigned QC</th>}
@@ -427,7 +490,7 @@ const OrderManagement = () => {
           <tbody>
             {orders.length === 0 ? (
               <tr>
-                <td colSpan={isB2BUser ? 8 : (isArtist ? 9 : 11)} style={{ textAlign: 'center', padding: '40px' }}>
+                <td colSpan={isB2BUser ? 9 : (isArtist ? 10 : 12)} style={{ textAlign: 'center', padding: '40px' }}>
                   No orders found. {canWrite && 'Click "Create New Order" to add one.'}
                 </td>
               </tr>
@@ -454,12 +517,31 @@ const OrderManagement = () => {
                     {order.image_path ? (
                       <button
                         className="btn-small"
-                        title="View images"
+                        title="Download images"
                         onClick={() => openImageViewer(order)}
                         style={{ background: '#FDF2F4', color: '#722F37' }}
                       >
-                        View ({parseImagePaths(order.image_path).length})
+                        Download Image ({parseImagePaths(order.image_path).length})
                       </button>
+                    ) : (
+                      <span style={{ color: '#9ca3af', fontSize: '0.85em' }}>-</span>
+                    )}
+                  </td>
+                  <td>
+                    {order.model_path ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {parseModelPaths(order.model_path).map((modelPath, idx) => (
+                          <button
+                            key={idx}
+                            className="btn-small"
+                            title="Download model"
+                            onClick={() => handleDownloadModel(modelPath)}
+                            style={{ background: '#e0f2fe', color: '#0369a1', fontSize: '0.75em' }}
+                          >
+                            📦 {modelPath.split('/').pop()}
+                          </button>
+                        ))}
+                      </div>
                     ) : (
                       <span style={{ color: '#9ca3af', fontSize: '0.85em' }}>-</span>
                     )}
@@ -490,13 +572,35 @@ const OrderManagement = () => {
                   <td>
                     <div className="action-buttons">
                       {isArtist ? (
-                        <button className="btn-small" title="Upload images" onClick={() => handleEditOrder(order)} style={{ background: '#e0f2fe', color: '#0369a1' }}>
-                          Upload
-                        </button>
+                        <>
+                          <button className="btn-small" title="Upload images" onClick={() => handleEditOrder(order)} style={{ background: '#e0f2fe', color: '#0369a1' }}>
+                            Upload
+                          </button>
+                          {isQCRole && order.status === 'Ready For QC' && (
+                            <button
+                              className="btn-small"
+                              title="Approve QC"
+                              onClick={() => handleApproveQC(order.id, order.internal_order_id)}
+                              style={{ background: '#10b981', color: 'white' }}
+                            >
+                              ✓ QC
+                            </button>
+                          )}
+                        </>
                       ) : (
                         <>
                           {canUpdate && (
                             <button className="btn-small" title="Edit order" onClick={() => handleEditOrder(order)}>✏️</button>
+                          )}
+                          {isQCRole && order.status === 'Ready For QC' && (
+                            <button
+                              className="btn-small"
+                              title="Approve QC"
+                              onClick={() => handleApproveQC(order.id, order.internal_order_id)}
+                              style={{ background: '#10b981', color: 'white' }}
+                            >
+                              ✓ QC
+                            </button>
                           )}
                           {canDelete && (
                             <button className="btn-small danger" title="Delete order" onClick={() => handleDeleteOrder(order.id)}>🗑️</button>
